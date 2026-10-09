@@ -1,7 +1,6 @@
 import argparse
 import hashlib
 import os
-import time
 from getpass import getpass
 from pathlib import Path
 from urllib.parse import urlparse
@@ -9,13 +8,19 @@ from urllib.parse import urlparse
 from dotenv import load_dotenv
 
 from ..agent.agent_role import AgentRole
-from ..agent.backend import ChatCompletionsBackend, ModelBackend, ScriptedBackend
+from ..agent.backend import (
+    ChatCompletionsBackend,
+    ModelBackend,
+    ResponsesBackend,
+    ScriptedBackend,
+)
 from ..agent.personas import create_agents
 from ..games.wordle.bridge import WordleBridge
 from ..games.wordle.dataset import load_allowed_guesses, load_puzzle
 from ..games.wordle.engine import WordleGame
 from ..orchestra.debate import create_debate_graph
 from ..orchestra.debate_context import DebateState
+from ..play import play_wordle_game
 from ..run_log import RunLog
 
 
@@ -50,6 +55,12 @@ def main() -> None:
         choices=["scripted", "ollama", "zen"],
         default="scripted",
         help="Which backend to use.",
+    )
+    parser.add_argument(
+        "--protocol",
+        choices=["chat", "responses"],
+        default="chat",
+        help="OpenAI-compatible protocol for the model backend.",
     )
     parser.add_argument(
         "--api-key-env",
@@ -163,14 +174,19 @@ def main() -> None:
         print("Backend: scripted test, no LLM")
 
     else:
-        if (
-            not args.model
-            or not args.base_url
-            or args.temperature is None
-        ):
+        if not args.model or not args.base_url:
             parser.error(
-                "--backend ollama or zen requires "
-                "--model, --base-url, and --temperature"
+                "--backend ollama or zen requires --model and --base-url"
+            )
+
+        if args.protocol == "chat" and args.temperature is None:
+            parser.error(
+                "--temperature is required with the chat protocol"
+            )
+
+        if args.stream and args.protocol == "responses":
+            parser.error(
+                "--stream is not supported with --protocol responses"
             )
 
         if args.backend == "zen":
@@ -203,14 +219,24 @@ def main() -> None:
             # Local Ollama's SDK placeholder, not a real secret.
             api_key = "ollama"
 
-        backend = ChatCompletionsBackend(
-            model=args.model,
-            base_url=args.base_url,
-            temperature=args.temperature,
-            api_key=api_key,
-            request_timeout=args.request_timeout,
-            api_retries=args.api_retries,
-        )
+        if args.protocol == "responses":
+            backend = ResponsesBackend(
+                model=args.model,
+                base_url=args.base_url,
+                api_key=api_key,
+                temperature=args.temperature,
+                request_timeout=args.request_timeout,
+                api_retries=args.api_retries,
+            )
+        else:
+            backend = ChatCompletionsBackend(
+                model=args.model,
+                base_url=args.base_url,
+                temperature=args.temperature,
+                api_key=api_key,
+                request_timeout=args.request_timeout,
+                api_retries=args.api_retries,
+            )
 
         print(
             f"Backend: {args.backend} | model: {args.model}"
@@ -237,6 +263,7 @@ def main() -> None:
         run = RunLog(
             metadata={
                 "backend": args.backend,
+                "protocol": args.protocol,
                 "model_requested": args.model,
                 "base_url": args.base_url,
                 "temperature": args.temperature,
@@ -263,117 +290,20 @@ def main() -> None:
             path=args.output,
         )
 
-        started = time.perf_counter()
-
-        try:
-            graph = create_debate_graph(
-                agents,
-                stream=args.stream,
-                validate_action=bridge.validate_action,
-                max_repairs=args.max_repairs,
-            )
-
-            while not game.done:
-                observation = game.observation()
-                turn = len(observation["history"]) + 1
-                turn_started = time.perf_counter()
-
-                print(f"\n{'=' * 40}")
-                print(f"Wordle turn {turn}")
-
-                initial_state: DebateState = {
-                    "context": bridge.observe(),
-                    "proposal": "",
-                    "alternative": "",
-                    "transcript": [],
-                    "final_action": "",
-                    "round": 0,
-                    "max_rounds": args.max_rounds,
-                    "stop": False,
-                }
-
-                result = graph.invoke(
-                    initial_state,
-                    {
-                        "recursion_limit": args.max_rounds * 3 + 5,
-                    },
-                )
-
-                guess_result = bridge.execute(
-                    result["final_action"]
-                )
-
-                termination = result["termination"]
-
-                run.data["turns"].append(
-                    {
-                        "turn": turn,
-                        "observation_before": observation,
-                        "final_action": guess_result.guess,
-                        "feedback": guess_result.feedback,
-                        "debate_rounds": result["round"],
-                        "gm_requested_stop": result["stop"],
-                        "round_cap_reached": (
-                            result["round"] >= args.max_rounds
-                        ),
-                        "termination": getattr(
-                            termination,
-                            "value",
-                            termination,
-                        ),
-                        "transcript": result["transcript"],
-                        "elapsed_seconds": (
-                            time.perf_counter() - turn_started
-                        ),
-                    }
-                )
-
-                # Save immediately after each executed guess.
-                run.save()
-
-                print(f"\nExecuted guess: {guess_result.guess}")
-                print(f"Feedback: {guess_result.feedback}")
-                print(f"Debate rounds: {result['round']}")
-                print(f"Termination: {termination}")
-
-            run.data["status"] = "completed"
-
-        except KeyboardInterrupt:
-            run.data["status"] = "interrupted"
-            run.data["error"] = {"type": "KeyboardInterrupt"}
-            raise
-
-        except Exception as error:
-            run.data["status"] = "failed"
-            run.data["error"] = {
-                "type": type(error).__name__,
-            }
-            raise
-
-        finally:
-            observation = game.observation()
-            guesses_used = len(observation["history"])
-
-            run.data["outcome"] = {
-                "game_finished": game.done,
-                "won": game.won if game.done else None,
-                "guesses_used": guesses_used,
-                "solve_guesses": (
-                    guesses_used if game.won else None
-                ),
-                "history": observation["history"],
-            }
-
-            run.data["elapsed_seconds"] = (
-                time.perf_counter() - started
-            )
-
-            run.save()
-            print(f"\nResult saved: {run.path}")
+        play_wordle_game(
+            game=game,
+            bridge=bridge,
+            agents=agents,
+            run=run,
+            max_rounds=args.max_rounds,
+            max_repairs=args.max_repairs,
+            stream=args.stream,
+            echo=True,
+        )
 
         print("\nGame finished")
         print(f"Won: {game.won}")
-        print(f"Guesses used: {guesses_used}")
+        print(f"Guesses used: {len(game.observation()['history'])}")
 
         return
 

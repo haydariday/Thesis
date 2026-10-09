@@ -1,0 +1,292 @@
+{
+  "schema_version": 1,
+  "run_id": "2ca7e60e3f684b798b724c9e460429ba",
+  "created_at": "2026-10-08T13:22:06.224728+00:00",
+  "status": "completed",
+  "metadata": {
+    "experiment_id": "pilot-01",
+    "backend": "zen",
+    "protocol": "responses",
+    "model_requested": "gpt-6-luna",
+    "base_url": "https://opencode.ai/zen/v1/",
+    "temperature": null,
+    "stream": false,
+    "max_rounds": 3,
+    "max_repairs": 1,
+    "request_timeout": 300.0,
+    "api_retries": 1,
+    "puzzle_id": "234",
+    "target_answer": "FRAME",
+    "guess_policy": "supplied_vocabulary",
+    "vocabulary_size": 14855,
+    "dataset_sha256": "ed235aa79e1c13a684b7517dda08976967ce8ddb653943632d71b7dea2c41a27",
+    "guess_list_sha256": "9df5dad1b44cf1b9e0fa7c3ebff94d69ff7efb59f8691ac88e74e1c7b3da121e",
+    "repetition": 2,
+    "attempt": 1,
+    "agent_instructions": {
+      "gm": "You are the GM in a Wordle playtesting system. Propose a guess based on the available game state. After the advisors respond, evaluate both arguments and retain or revise your proposal. Do not invent game feedback or claim unanimous agreement.",
+      "negative": "You are the Negative advisor in a Wordle playtesting system. Challenge the GM's current proposed guess. Identify a specific weakness and suggest an alternative with supporting reasoning. Your goal is to improve the decision, not to lose the game.",
+      "positive": "You are the Positive advisor in a Wordle playtesting system. Respond to the Negative advisor's critique. Defend the GM's current proposed guess by explaining its strengths and the alternative's trade-offs. Acknowledge valid weaknesses instead of inventing a defense."
+    }
+  },
+  "turns": [
+    {
+      "turn": 1,
+      "observation_before": {
+        "game": "wordle",
+        "word_length": 5,
+        "history": [],
+        "attempts_remaining": 6,
+        "done": false,
+        "won": false,
+        "guess_policy": "supplied_vocabulary"
+      },
+      "final_action": "CRANE",
+      "feedback": "BGGBG",
+      "debate_rounds": 1,
+      "gm_requested_stop": true,
+      "round_cap_reached": false,
+      "termination": "gm_stop",
+      "transcript": [
+        "GM proposes CRANE: A strong opening guess that tests five common letters across distinct positions.",
+        "Negative suggests SLATE: CRANE tests useful letters, but SLATE covers S, L, and T—high-frequency letters that CRANE misses—while still testing A and E. That may narrow the answer set more effectively on the opening turn.",
+        "Positive defends CRANE: CRANE is a strong opener: it tests five common letters in distinct positions, including three useful consonants (C, R, N) alongside A and E. SLATE is also a strong choice and covers S, L, and T, which CRANE misses; without feedback, neither has a decisive advantage, but CRANE offers a similarly broad initial probe.",
+        "GM reviews and selects CRANE: Both are strong opening probes. I retain CRANE because it tests five common letters in distinct positions; the transcript gives no decisive advantage to SLATE."
+      ],
+      "elapsed_seconds": 196.68739822500356
+    },
+    {
+      "turn": 2,
+      "observation_before": {
+        "game": "wordle",
+        "word_length": 5,
+        "history": [
+          {
+            "guess": "CRANE",
+            "feedback": "BGGBG"
+          }
+        ],
+        "attempts_remaining": 5,
+        "done": false,
+        "won": false,
+        "guess_policy": "supplied_vocabulary"
+      },
+      "final_action": "GRADE",
+      "feedback": "BGGBG",
+      "debate_rounds": 1,
+      "gm_requested_stop": true,
+      "round_cap_reached": false,
+      "termination": "gm_stop",
+      "transcript": [
+        "GM proposes WRONG: R and N are fixed in positions 2 and 4; WRONG tests three new letters without reusing known-absent letters.",
+        "Negative suggests GRADE: WRONG contradicts the feedback: A and E are green in positions 3 and 5, while N is absent. GRADE matches the known pattern _RA_E and tests two new letters.",
+        "Positive defends WRONG: WRONG does test several otherwise untried letters, but the critique is valid: it contradicts the known A and E positions and reuses absent N. GRADE fits _RA_E and is clearly the stronger, constraint-consistent guess, though it tests only G and D as new letters.",
+        "GM reviews and selects GRADE: Revise to GRADE: it preserves the confirmed R, A, and E positions and avoids absent C and N. WRONG contradicts the feedback. The case for GRADE is clear; another round is unlikely to change the decision."
+      ],
+      "elapsed_seconds": 45.47090901200136
+    },
+    {
+      "turn": 3,
+      "observation_before": {
+        "game": "wordle",
+        "word_length": 5,
+        "history": [
+          {
+            "guess": "CRANE",
+            "feedback": "BGGBG"
+          },
+          {
+            "guess": "GRADE",
+            "feedback": "BGGBG"
+          }
+        ],
+        "attempts_remaining": 4,
+        "done": false,
+        "won": false,
+        "guess_policy": "supplied_vocabulary"
+      },
+      "final_action": "FRAME",
+      "feedback": "GGGGG",
+      "debate_rounds": 1,
+      "gm_requested_stop": true,
+      "round_cap_reached": false,
+      "termination": "gm_stop",
+      "transcript": [
+        "GM proposes FRAME: Both clues establish the pattern _RA_E and rule out C, N, G, and D. FRAME fits and tests two new letters.",
+        "Negative suggests IRATE: FRAME tests F and M, but both clues leave a broad _RA_E pattern. IRATE is also consistent and tests I and T, common alternatives that may narrow the remaining candidates more effectively.",
+        "Positive defends FRAME: FRAME preserves the confirmed _RA_E pattern and tests two untried letters. IRATE is also consistent, and I/T may be useful probes, but the public history does not show that they narrow the supplied vocabulary better than F/M. The remaining pattern is broad, so FRAME is not guaranteed to be the stronger discriminator.",
+        "GM reviews and selects FRAME: Both FRAME and IRATE fit the _RA_E pattern and test two new letters. The public history gives no basis to conclude I/T is a better discriminator than F/M, so I retain FRAME as a valid candidate and probe. Another round is unlikely to change that choice without additional vocabulary information."
+      ],
+      "elapsed_seconds": 33.284190738995676
+    }
+  ],
+  "outcome": {
+    "game_finished": true,
+    "won": true,
+    "guesses_used": 3,
+    "solve_guesses": 3,
+    "history": [
+      {
+        "guess": "CRANE",
+        "feedback": "BGGBG"
+      },
+      {
+        "guess": "GRADE",
+        "feedback": "BGGBG"
+      },
+      {
+        "guess": "FRAME",
+        "feedback": "GGGGG"
+      }
+    ]
+  },
+  "error": null,
+  "elapsed_seconds": 275.4452098539987,
+  "token_usage": {
+    "prompt_tokens": 5977,
+    "completion_tokens": 3301,
+    "total_tokens": 9278,
+    "calls": 12,
+    "calls_with_usage": 12,
+    "calls_missing_usage": 0
+  },
+  "calls": [
+    {
+      "role": "gm",
+      "attempt": 1,
+      "rejected": false,
+      "error_type": null,
+      "prompt_tokens": 405,
+      "completion_tokens": 62,
+      "total_tokens": 467,
+      "elapsed_seconds": 29.382719547000306,
+      "model": "gpt-6-luna"
+    },
+    {
+      "role": "negative",
+      "attempt": 1,
+      "rejected": false,
+      "error_type": null,
+      "prompt_tokens": 432,
+      "completion_tokens": 201,
+      "total_tokens": 633,
+      "elapsed_seconds": 38.04474220600241,
+      "model": "gpt-6-luna"
+    },
+    {
+      "role": "positive",
+      "attempt": 1,
+      "rejected": false,
+      "error_type": null,
+      "prompt_tokens": 498,
+      "completion_tokens": 160,
+      "total_tokens": 658,
+      "elapsed_seconds": 86.2781150439987,
+      "model": "gpt-6-luna"
+    },
+    {
+      "role": "gm",
+      "attempt": 1,
+      "rejected": false,
+      "error_type": null,
+      "prompt_tokens": 584,
+      "completion_tokens": 121,
+      "total_tokens": 705,
+      "elapsed_seconds": 42.978530540000065,
+      "model": "gpt-6-luna"
+    },
+    {
+      "role": "gm",
+      "attempt": 1,
+      "rejected": false,
+      "error_type": null,
+      "prompt_tokens": 421,
+      "completion_tokens": 205,
+      "total_tokens": 626,
+      "elapsed_seconds": 27.372412184995483,
+      "model": "gpt-6-luna"
+    },
+    {
+      "role": "negative",
+      "attempt": 1,
+      "rejected": false,
+      "error_type": null,
+      "prompt_tokens": 461,
+      "completion_tokens": 386,
+      "total_tokens": 847,
+      "elapsed_seconds": 6.435610081993218,
+      "model": "gpt-6-luna"
+    },
+    {
+      "role": "positive",
+      "attempt": 1,
+      "rejected": false,
+      "error_type": null,
+      "prompt_tokens": 520,
+      "completion_tokens": 351,
+      "total_tokens": 871,
+      "elapsed_seconds": 7.09355486700224,
+      "model": "gpt-6-luna"
+    },
+    {
+      "role": "gm",
+      "attempt": 1,
+      "rejected": false,
+      "error_type": null,
+      "prompt_tokens": 591,
+      "completion_tokens": 218,
+      "total_tokens": 809,
+      "elapsed_seconds": 4.56723914500617,
+      "model": "gpt-6-luna"
+    },
+    {
+      "role": "gm",
+      "attempt": 1,
+      "rejected": false,
+      "error_type": null,
+      "prompt_tokens": 437,
+      "completion_tokens": 259,
+      "total_tokens": 696,
+      "elapsed_seconds": 10.122228239000833,
+      "model": "gpt-6-luna"
+    },
+    {
+      "role": "negative",
+      "attempt": 1,
+      "rejected": false,
+      "error_type": null,
+      "prompt_tokens": 477,
+      "completion_tokens": 667,
+      "total_tokens": 1144,
+      "elapsed_seconds": 10.292466142993362,
+      "model": "gpt-6-luna"
+    },
+    {
+      "role": "positive",
+      "attempt": 1,
+      "rejected": false,
+      "error_type": null,
+      "prompt_tokens": 537,
+      "completion_tokens": 294,
+      "total_tokens": 831,
+      "elapsed_seconds": 4.902178199998161,
+      "model": "gpt-6-luna"
+    },
+    {
+      "role": "gm",
+      "attempt": 1,
+      "rejected": false,
+      "error_type": null,
+      "prompt_tokens": 614,
+      "completion_tokens": 377,
+      "total_tokens": 991,
+      "elapsed_seconds": 7.965211566996004,
+      "model": "gpt-6-luna"
+    }
+  ],
+  "counters": {
+    "agent_calls": 12,
+    "rejected_responses": 0,
+    "backend_errors": 0
+  }
+}

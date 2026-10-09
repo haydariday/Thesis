@@ -1,10 +1,10 @@
 import json
 from collections.abc import Callable, Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from ..decision import AgentDecision
 from .agent_role import AgentRole
-from .backend import Messages, ModelBackend
+from .backend import Completion, Messages, ModelBackend
 
 
 @dataclass
@@ -13,6 +13,11 @@ class Agent:
     role: AgentRole
     instruction: str
     backend: ModelBackend
+    last_completion: Completion | None = field(
+        default=None,
+        compare=False,
+        repr=False,
+    )
 
     def build_messages(self, context: str) -> Messages:
         """Prepare this agent's instruction and input."""
@@ -32,7 +37,7 @@ class Agent:
         """Ask the assigned backend to generate a response."""
 
         messages = self.build_messages(context)
-        return self.backend.complete(messages)
+        return self.backend.complete(messages).text
 
     def respond_stream(self, context: str) -> Iterator[str]:
         """Generate response text incrementally."""
@@ -63,8 +68,12 @@ class Agent:
             {"role": "user", "content": context},
         ]
 
+        self.last_completion = None
+
         if on_chunk is None:
-            raw_response = self.backend.complete(messages)
+            completion = self.backend.complete(messages)
+            self.last_completion = completion
+            raw_response = completion.text
         else:
             parts: list[str] = []
 
@@ -73,5 +82,7 @@ class Agent:
                 parts.append(chunk)
 
             raw_response = "".join(parts)
+            # Streaming responses do not report token usage yet.
+            self.last_completion = Completion(text=raw_response)
 
         return AgentDecision.model_validate_json(raw_response)

@@ -1,8 +1,12 @@
 import json
+import time
 from collections.abc import Callable
 
 from ..agent.agent import Agent
 from ..agent.agent_role import AgentRole
+from ..agent.backend import Completion
+from ..decision import AgentDecision
+from ..run_log import CallRecorder
 from .debate_context import DebateState, Termination
 from .flow.sequential import CHALLENGE, FINALIZE, build_sequential_graph
 
@@ -13,8 +17,43 @@ def create_debate_graph(
     stream: bool = False,
     validate_action: Callable[[str], str] | None = None,
     max_repairs: int = 1,
+    recorder: CallRecorder | None = None,
 ):
     """Build the debate using validated model decisions."""
+
+    def record_call(
+        role: AgentRole,
+        attempt: int,
+        *,
+        rejected: bool,
+        error_type: str | None,
+        completion: Completion | None,
+        elapsed_seconds: float,
+    ) -> None:
+        if recorder is None:
+            return
+
+        recorder.record(
+            role=role.value,
+            attempt=attempt,
+            rejected=rejected,
+            error_type=error_type,
+            prompt_tokens=(
+                completion.prompt_tokens if completion is not None else None
+            ),
+            completion_tokens=(
+                completion.completion_tokens
+                if completion is not None
+                else None
+            ),
+            total_tokens=(
+                completion.total_tokens if completion is not None else None
+            ),
+            elapsed_seconds=elapsed_seconds,
+            model=(
+                completion.model if completion is not None else None
+            ),
+        )
 
     def ask(
         role: AgentRole,
@@ -22,7 +61,7 @@ def create_debate_graph(
         task: str,
         *,
         allow_stop: bool = False,
-    ):
+    ) -> AgentDecision:
         agent = agents[role]
 
         payload = {
@@ -39,9 +78,15 @@ def create_debate_graph(
 
         for attempt in range(max_repairs + 1):
             decision = None
+            error: ValueError | None = None
+            started = time.perf_counter()
+
+            correction = " | correction" if attempt > 0 else ""
 
             print(
-                f"\nAgent: {agent.name} | attempt {attempt + 1}"
+                f"\nAgent: {agent.name} | "
+                f"round {state['round'] + 1}/{state['max_rounds']}"
+                f"{correction}"
             )
 
             try:
@@ -49,72 +94,108 @@ def create_debate_graph(
                     json.dumps(payload, ensure_ascii=False),
                     on_chunk=display_chunk if stream else None,
                 )
-
+            except ValueError as exc:
+                error = exc
+            except Exception as exc:
                 if stream:
                     print()
-                else:
+
+                record_call(
+                    role,
+                    attempt + 1,
+                    rejected=False,
+                    error_type=type(exc).__name__,
+                    completion=agent.last_completion,
+                    elapsed_seconds=time.perf_counter() - started,
+                )
+                raise
+
+            if stream:
+                print()
+
+            if decision is not None:
+                if not stream:
                     print(decision.model_dump_json(indent=2))
 
-                if validate_action is not None:
-                    decision = decision.model_copy(
-                        update={
-                            "action": validate_action(decision.action)
-                        }
-                    )
+                try:
+                    if validate_action is not None:
+                        decision = decision.model_copy(
+                            update={
+                                "action": validate_action(
+                                    decision.action
+                                )
+                            }
+                        )
 
-                if decision.stop and (
-                    role != AgentRole.GM or not allow_stop
-                ):
-                    raise ValueError(
-                        "Only GM review may request a stop."
-                    )
+                    if decision.stop and (
+                        role != AgentRole.GM or not allow_stop
+                    ):
+                        raise ValueError(
+                            "Only GM review may request a stop."
+                        )
 
-                if (
-                    role == AgentRole.NEGATIVE
-                    and decision.action == state["proposal"]
-                ):
-                    raise ValueError(
-                        "Negative must offer a different action."
-                    )
+                    if (
+                        role == AgentRole.NEGATIVE
+                        and decision.action == state["proposal"]
+                    ):
+                        raise ValueError(
+                            "Negative must offer a different action."
+                        )
 
-                if (
-                    role == AgentRole.POSITIVE
-                    and decision.action != state["proposal"]
-                ):
-                    raise ValueError(
-                        "Positive must defend the current GM action."
+                    if (
+                        role == AgentRole.POSITIVE
+                        and decision.action != state["proposal"]
+                    ):
+                        raise ValueError(
+                            "Positive must defend the current GM action."
+                        )
+
+                except ValueError as exc:
+                    error = exc
+
+            record_call(
+                role,
+                attempt + 1,
+                rejected=error is not None,
+                error_type=(
+                    type(error).__name__ if error is not None else None
+                ),
+                completion=agent.last_completion,
+                elapsed_seconds=time.perf_counter() - started,
+            )
+
+            if error is None:
+                if decision is None:
+                    raise AssertionError(
+                        "A validated decision must be present."
                     )
 
                 return decision
 
-            except ValueError as error:
-                if stream and decision is None:
-                    print()
+            print(f"Rejected response: {error}")
 
-                print(f"Rejected response: {error}")
+            if attempt == max_repairs:
+                raise ValueError(
+                    f"{agent.name} failed validation after "
+                    f"{max_repairs + 1} attempt(s): {error}"
+                ) from error
 
-                if attempt == max_repairs:
-                    raise ValueError(
-                        f"{agent.name} failed validation after "
-                        f"{max_repairs + 1} attempt(s): {error}"
-                    ) from error
-
-                payload["repair"] = {
-                    "validation_error": str(error),
-                    "previous_decision": (
-                        decision.model_dump()
-                        if decision is not None
-                        else None
-                    ),
-                    "instruction": (
-                        "Correct the response using this error "
-                        "and the game rules. "
-                        "Return only the required JSON. "
-                        "Keep your assigned role. "
-                        "This is a correction within the same turn, "
-                        "not a new round."
-                    ),
-                }
+            payload["repair"] = {
+                "validation_error": str(error),
+                "previous_decision": (
+                    decision.model_dump()
+                    if decision is not None
+                    else None
+                ),
+                "instruction": (
+                    "Correct the response using this error "
+                    "and the game rules. "
+                    "Return only the required JSON. "
+                    "Keep your assigned role. "
+                    "This is a correction within the same turn, "
+                    "not a new round."
+                ),
+            }
 
         raise AssertionError("Unreachable")
 
