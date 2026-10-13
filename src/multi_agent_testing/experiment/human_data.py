@@ -7,12 +7,14 @@ Pilot-02, phase P1. The module is standard library only and is meant to be run a
         --guess-list src/data/raw/allowed_guesses.txt \\
         --output src/data/processed/wordle_human_clean.csv
 
-It writes two files:
+It writes three files:
 
 * ``<output>.csv`` - one row per dataset record (eligible or not), ordered by
   ascending puzzle id.
 * ``<output>.summary.json`` - input hashes, counts and the eligibility rules
   used, so later phases can verify they read the expected file.
+* ``quartiles.json`` (next to the CSV) - the frozen D1..D4 definition: sizes,
+  ranges, cut-points and boundary ties (phase P2, see :mod:`quartiles`).
 
 7-bin distribution
 ------------------
@@ -43,6 +45,12 @@ Some answers occur more than once. Every eligible row carries
 next, ...) and ``duplicate_answer`` (true when the answer occurs more than
 once among eligible rows). Both copies stay in the file; the pilot-02 sampler
 (phase P3) only draws rows with ``duplicate_answer == False``.
+
+Quartiles
+---------
+``quartile`` (D1..D4) is assigned over all eligible rows, duplicates included,
+because the quartiles describe the human difficulty population rather than the
+sampling pool. Ineligible rows get a blank quartile.
 """
 
 import argparse
@@ -54,6 +62,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
+from .quartiles import QuartileSpec, RankedPuzzle, assign_quartiles
 from .manifest import (
     MAX_SOLVED_SHARE,
     MIN_SOLVED_SHARE,
@@ -84,6 +93,7 @@ CLEAN_COLUMNS: tuple[str, ...] = (
     "human_mean_high",
     "human_loss_pct",
     "human_mode_bin",
+    "quartile",
     "answer_occurrence",
     "duplicate_answer",
 )
@@ -97,6 +107,7 @@ class CleanRow:
     bins: tuple[float, ...] | None
     answer_occurrence: int | None
     duplicate_answer: bool | None
+    quartile: str | None = None
 
     @property
     def mode_bin(self) -> int | None:
@@ -143,13 +154,22 @@ def _row_bins(record: dict[str, object]) -> tuple[float, ...] | None:
 def clean_records(
     dataset: dict[str, dict[str, object]],
     vocabulary: set[str],
-) -> list[CleanRow]:
-    """Audit every record and attach its bins and duplicate-answer flags."""
+) -> tuple[list[CleanRow], QuartileSpec]:
+    """Audit every record and attach bins, duplicate flags and quartiles."""
 
     ordered_ids = sorted(dataset, key=_puzzle_sort_key)
     audits = {pid: audit_record(pid, dataset[pid], vocabulary) for pid in ordered_ids}
 
     eligible_answers = Counter(a.answer for a in audits.values() if a.eligible)
+    quartile_of, spec = assign_quartiles(
+        [
+            # Means are multiples of 0.01; rounding removes float noise so
+            # equal means tie exactly at the quartile boundaries.
+            RankedPuzzle(a.puzzle_id, round(cast(float, a.human_mean_score), 6))
+            for a in audits.values()
+            if a.eligible
+        ]
+    )
     seen: Counter[str] = Counter()
 
     rows: list[CleanRow] = []
@@ -167,9 +187,10 @@ def clean_records(
                 bins=_row_bins(dataset[pid]),
                 answer_occurrence=occurrence,
                 duplicate_answer=duplicate,
+                quartile=quartile_of.get(pid),
             )
         )
-    return rows
+    return rows, spec
 
 
 def _fmt(value: float | None, digits: int) -> float | str:
@@ -202,6 +223,7 @@ def write_clean_csv(path: Path, rows: list[CleanRow]) -> None:
                 "human_mean_high": _fmt(audit.human_mean_high, 6),
                 "human_loss_pct": _fmt(audit.human_loss_pct, 2),
                 "human_mode_bin": _fmt_optional(row.mode_bin),
+                "quartile": _fmt_optional(row.quartile),
                 "answer_occurrence": _fmt_optional(row.answer_occurrence),
                 "duplicate_answer": _fmt_optional(row.duplicate_answer),
             }
@@ -216,6 +238,7 @@ def _sha256(path: Path) -> str:
 
 def build_summary(
     rows: list[CleanRow],
+    spec: QuartileSpec,
     dataset_path: Path,
     guess_list_path: Path,
     output_path: Path,
@@ -251,6 +274,7 @@ def build_summary(
             "duplicate_answers": len(duplicates),
             "eligible_unique_answer_rows": sum(1 for r in eligible if not r.duplicate_answer),
         },
+        "quartiles": {"sizes": list(spec.sizes), "cut_points": [round(c, 6) for c in spec.cut_points]},
         "excluded": excluded,
         "duplicate_answers": duplicates,
         "human_mean": {
@@ -263,18 +287,62 @@ def build_summary(
     }
 
 
+def quartiles_path_for(output_path: Path) -> Path:
+    """``quartiles.json`` lives next to the cleaned CSV."""
+
+    return output_path.parent / "quartiles.json"
+
+
+def build_quartiles_json(
+    spec: QuartileSpec,
+    rows: list[CleanRow],
+    dataset_path: Path,
+    output_path: Path,
+) -> dict[str, object]:
+    """Frozen quartile definition plus per-quartile human descriptives."""
+
+    payload = spec.to_json()
+    payload["phase"] = "pilot-02 P2"
+    payload["source"] = {
+        "dataset_sha256": _sha256(dataset_path),
+        "clean_csv": output_path.as_posix(),
+        "clean_csv_sha256": _sha256(output_path),
+    }
+    descriptives: dict[str, object] = {}
+    for label in ("D1", "D2", "D3", "D4"):
+        group = [r for r in rows if r.quartile == label]
+        bins = [cast("tuple[float, ...]", r.bins) for r in group]
+        mean_bins = [sum(b[k] for b in bins) / len(bins) for k in range(BIN_COUNT)]
+        descriptives[label] = {
+            "n": len(group),
+            "mean_human_score": round(
+                sum(cast(float, r.audit.human_mean_score) for r in group) / len(group), 6
+            ),
+            "mean_bins": {f"p{k + 1}": round(v, 6) for k, v in enumerate(mean_bins)},
+            "share_fail_ge_5pct": round(
+                sum(1 for r in group if cast(float, r.audit.human_loss_pct) >= 5) / len(group), 6
+            ),
+        }
+    payload["descriptives"] = descriptives
+    return payload
+
+
 def build_clean_dataset(
     dataset_path: Path,
     guess_list_path: Path,
     output_path: Path,
 ) -> tuple[list[CleanRow], dict[str, object]]:
-    """Clean the dataset and write the CSV plus its summary JSON."""
+    """Clean the dataset and write the CSV, summary JSON and quartiles JSON."""
 
-    rows = clean_records(load_dataset(dataset_path), load_vocabulary(guess_list_path))
+    rows, spec = clean_records(load_dataset(dataset_path), load_vocabulary(guess_list_path))
     write_clean_csv(output_path, rows)
-    summary = build_summary(rows, dataset_path, guess_list_path, output_path)
+    summary = build_summary(rows, spec, dataset_path, guess_list_path, output_path)
     summary_path = output_path.with_suffix(".summary.json")
     summary_path.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
+    quartiles = build_quartiles_json(spec, rows, dataset_path, output_path)
+    quartiles_path_for(output_path).write_text(
+        json.dumps(quartiles, indent=2) + "\n", encoding="utf-8"
+    )
     return rows, summary
 
 
@@ -299,7 +367,12 @@ def main() -> None:
     print(f"Excluded: {counts['excluded']} {sorted(cast(dict, summary['excluded']), key=int)}")
     print(f"Duplicate answers: {counts['duplicate_answers']}")
     print(f"Eligible rows with a unique answer: {counts['eligible_unique_answer_rows']}")
-    print(f"Wrote {args.output} and {args.output.with_suffix('.summary.json')}")
+    quartiles = cast("dict[str, object]", summary["quartiles"])
+    print(f"Quartile sizes: {quartiles['sizes']}  cut-points: {quartiles['cut_points']}")
+    print(
+        f"Wrote {args.output}, {args.output.with_suffix('.summary.json')} "
+        f"and {quartiles_path_for(args.output)}"
+    )
 
 
 if __name__ == "__main__":

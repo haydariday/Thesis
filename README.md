@@ -18,6 +18,8 @@ Global docs: `Wordle Multi-Agent Playtesting Research Context and Experiment Roa
     --output src/data/processed/wordle_human_clean.csv
   ```
 
+  This also writes `src/data/processed/quartiles.json` (P2): D1–D4 by rank of human mean, sizes 465/465/465/466, cut-points 3.98/4.24/4.53, mapping rule for system scores. Figure F1: `experiments/pilot-02/figures/` (needs `uv sync --extra viz`).
+
 ## Quickstart
 
 ```bash

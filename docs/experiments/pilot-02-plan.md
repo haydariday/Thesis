@@ -109,7 +109,7 @@ Eligible puzzles are sorted by `(human_mean, puzzle_id)` and split into four gro
 | D3 | 465 | 4.24 – 4.53 | 18% |
 | D4 (hardest) | 466 | 4.53 – 6.21 | 83% |
 
-The cut-points (about 3.98, 4.24 and 4.53) are frozen in the config before any runs. The old easy/hard line at 4.0 is almost exactly the D1 boundary, which means 75% of puzzles were labelled "hard" under the old rule. This is a strong argument for the quartile scheme.
+The cut-points are exactly 3.98, 4.24 and 4.53, frozen in `src/data/processed/quartiles.json` (P2) before any runs. Human means are multiples of 0.01, so some puzzles tie at a boundary: 3, 13 and 1 puzzles (17 in total, 0.9%) share the cut value but sit in the lower quartile by rank (the tie-break is the puzzle id). A system score is mapped by value (`D1: s < 3.98`, `D2: 3.98 ≤ s < 4.24`, `D3: 4.24 ≤ s < 4.53`, `D4: s ≥ 4.53`), so a tied human puzzle mapped the same way would move up one quartile. The old easy/hard line at 4.0 is almost exactly the D1 boundary, which means 75% of puzzles were labelled "hard" under the old rule. This is a strong argument for the quartile scheme.
 
 ## 4. Experiment structure: why RQ1 and RQ2 are split
 
