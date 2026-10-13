@@ -27,14 +27,16 @@ agent/personas.py
   PersonaSpec(key, display_name, slot, instruction, task, action_rule)
       slot:        "gm" | "advisor"
       action_rule: "any" | "must_differ" | "must_equal"   (kept for the pilot-01 personas)
-  PERSONAS = {neutral_gm, negative, positive, bold, cautious, casual}
+  PERSONAS = {neutral_gm_v1, neutral_gm, negative, positive, bold, cautious, casual}
   PRESETS  = {
-      "pilot-01":        gm=neutral_gm, advisors=[negative, positive],
+      "pilot-01":        gm=neutral_gm_v1, advisors=[negative, positive],
       "pilot-02":        gm=neutral_gm, advisors=[bold, cautious, casual],
       "pilot-02-core":   gm=neutral_gm, advisors=[bold, cautious],
   }
-  create_agents(backend, preset=... | gm=..., advisors=[...])
+  create_lineup(backend, preset=... | advisors=[...], gm=...) -> Lineup(gm, advisors)
 ```
+
+`neutral_gm_v1` is the exact pilot-01 GM text, which says "evaluate both arguments". `neutral_gm` says "evaluate every advisor's argument" so it fits any number of advisors. `create_agents(backend)` stays as the pilot-01 role-keyed dict until P5 switches the graph to `Lineup`.
 
 - **CLI and config:** `--persona-preset pilot-02` or `--advisors bold,cautious,casual`. The chosen keys and the full instruction text are written into `experiment_config.json` and each run's metadata.
 - **Debate graph:** `orchestra/flow/sequential.py` builds one node per advisor from the list, in order (`gm_propose → advisor_1 → … → advisor_n → gm_review`). The routing policy and the `max_rounds` cap stay the same.

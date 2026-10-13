@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from ..decision import AgentDecision
 from .agent_role import AgentRole
 from .backend import Completion, Messages, ModelBackend
+from .persona_spec import PersonaSpec
 
 
 @dataclass
@@ -13,6 +14,7 @@ class Agent:
     role: AgentRole
     instruction: str
     backend: ModelBackend
+    persona: PersonaSpec | None = None
     last_completion: Completion | None = field(
         default=None,
         compare=False,
