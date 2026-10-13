@@ -224,7 +224,7 @@ Pilot-01 can be re-plotted with F2, F5, F6 and F7 (using easy/hard or quartiles)
 
 ## 9. Implementation phases
 
-The work is split into 15 small phases. Each phase ends in one commit on `pilot-2`, has a clear "done when" check, and can be reviewed on its own. Phases marked **offline** use no API calls. Phases marked **live** spend tokens.
+The work is split into 16 small phases (P0 to P15). Each phase ends in one commit on `pilot-2`, has a clear "done when" check, and can be reviewed on its own. Phases marked **offline** use no API calls. Phases marked **live** spend tokens.
 
 ### Track overview
 
