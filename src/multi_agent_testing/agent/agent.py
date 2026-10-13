@@ -14,7 +14,7 @@ class Agent:
     role: AgentRole
     instruction: str
     backend: ModelBackend
-    persona: PersonaSpec | None = None
+    persona: PersonaSpec
     last_completion: Completion | None = field(
         default=None,
         compare=False,

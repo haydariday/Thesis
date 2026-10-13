@@ -38,6 +38,7 @@ uv run python -m multi_agent_testing.test.debate_test \
   --model glm-5.3-flash \
   --base-url 'https://opencode.ai/zen/v1/' \
   --temperature 0.2 --play --max-rounds 3 \
+  --persona-preset pilot-02 \
   --dataset src/data/raw/worldepuzzles.json \
   --puzzle-id 234 --guess-list src/data/raw/allowed_guesses.txt
 
@@ -51,8 +52,11 @@ uv run python -m multi_agent_testing.experiment.runner start \
   --base-url 'https://opencode.ai/zen/v1/' \
   --temperature 0.2 --max-rounds 3 --max-repairs 1 \
   --request-timeout 300 --api-retries 1 \
-  --repetitions 32 --max-attempts 2
+  --repetitions 32 --max-attempts 2 \
+  --persona-preset pilot-02
 ```
+
+Personas: `runner start` needs `--persona-preset {pilot-01,pilot-02,pilot-02-core}` or `--advisors bold,cautious[,casual]` (speaking order), optional `--gm`. `debate_test` defaults to `pilot-02`. The keys and full persona text go to `settings.personas` in `experiment_config.json` and to each run's metadata. `resume` rebuilds the line-up from the config and refuses if the registry text has changed since `start`.
 
 Key in ignored `.env` as `OPENCODE_API_KEY`, never in source or logs.
 

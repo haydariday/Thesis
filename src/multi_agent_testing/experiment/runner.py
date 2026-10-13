@@ -25,7 +25,8 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from ..agent.backend import ChatCompletionsBackend, ResponsesBackend
-from ..agent.personas import create_lineup
+from ..agent.persona_args import add_persona_arguments, lineup_from_args
+from ..agent.personas import lineup_from_config
 from ..games.wordle.bridge import WordleBridge
 from ..games.wordle.dataset import (
     WordlePuzzle,
@@ -355,7 +356,7 @@ def execute_plan(
                 allowed_guesses=allowed_guesses,
             )
             bridge = WordleBridge(game)
-            lineup = create_lineup(backend, preset="pilot-01")
+            lineup = lineup_from_config(settings.get("personas"), backend)
 
             metadata = {
                 "experiment_id": config["experiment_id"],
@@ -378,6 +379,7 @@ def execute_plan(
                 "repetition": repetition,
                 "attempt": attempt,
                 "agent_instructions": lineup.instructions(),
+                "personas": lineup.config(),
             }
 
             run = RunLog(metadata=metadata, path=run_path)
@@ -466,6 +468,7 @@ def execute_plan(
 
 def run_start(parser, args) -> None:
     validate_start_args(parser, args)
+    lineup = lineup_from_args(parser, args)
 
     paths = {
         "dataset": args.dataset.resolve(),
@@ -485,6 +488,7 @@ def run_start(parser, args) -> None:
         )
 
     config = build_config(args)
+    config["settings"]["personas"] = lineup.config()
 
     experiment_dir.mkdir(parents=True)
     (experiment_dir / "runs").mkdir()
@@ -540,6 +544,11 @@ def run_resume(args) -> None:
                 f"{label} changed since the experiment was frozen; "
                 "start a new experiment instead."
             )
+
+    try:
+        lineup_from_config(config["settings"].get("personas"))
+    except ValueError as error:
+        raise SystemExit(f"{error} Start a new experiment instead.") from error
 
     execute_plan(
         experiment_dir,
@@ -600,6 +609,7 @@ def main() -> None:
     start.add_argument("--max-attempts", type=int, default=2)
     start.add_argument("--api-key-env", default="OPENCODE_API_KEY")
     start.add_argument("--limit", type=int)
+    add_persona_arguments(start)
     add_run_controls(start)
 
     resume = subparsers.add_parser(

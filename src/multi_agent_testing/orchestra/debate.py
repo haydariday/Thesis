@@ -216,8 +216,6 @@ def create_debate_graph(
 
     def advisor_node(agent: Agent) -> tuple[str, NodeFn]:
         spec = agent.persona
-        if spec is None:
-            raise ValueError(f"{agent.name} has no persona spec.")
 
         verb = "defends" if spec.action_rule == ActionRule.MUST_EQUAL else "suggests"
 

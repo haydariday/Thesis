@@ -5,7 +5,7 @@ from pathlib import Path
 from ..agent.agent_role import AgentRole
 from ..agent.backend import Completion
 from ..agent.persona_spec import ActionRule, PersonaSpec, Slot
-from ..agent.personas import PERSONAS, PRESETS, create_lineup
+from ..agent.personas import PERSONAS, PRESETS, create_lineup, lineup_from_config
 from ..orchestra.debate import create_debate_graph
 from ..orchestra.debate_context import new_debate_state
 
@@ -69,7 +69,7 @@ class LineupTest(unittest.TestCase):
     def test_explicit_advisors_default_to_neutral_gm(self):
         lineup = create_lineup(advisors=["cautious", "bold"])
         self.assertEqual(lineup.gm.persona, PERSONAS["neutral_gm"])
-        self.assertEqual([a.persona.key for a in lineup.advisors if a.persona], ["cautious", "bold"])
+        self.assertEqual([a.persona.key for a in lineup.advisors], ["cautious", "bold"])
         self.assertIsNone(lineup.preset)
 
     def test_gm_override(self):
@@ -90,6 +90,33 @@ class LineupTest(unittest.TestCase):
         for kwargs in cases:
             with self.subTest(kwargs=kwargs), self.assertRaises(ValueError):
                 create_lineup(**kwargs)
+
+
+class LineupConfigTest(unittest.TestCase):
+    def test_round_trip_for_every_preset(self):
+        for preset in PRESETS:
+            with self.subTest(preset=preset):
+                block = create_lineup(preset=preset).config()
+                self.assertEqual(lineup_from_config(block).config(), block)
+
+    def test_round_trip_for_explicit_advisors(self):
+        block = create_lineup(advisors=["casual", "bold"], gm="neutral_gm_v1").config()
+        self.assertEqual(lineup_from_config(block).config(), block)
+
+    def test_missing_block_means_pilot_01(self):
+        self.assertEqual(lineup_from_config(None).config()["preset"], "pilot-01")
+
+    def test_drifted_text_is_refused(self):
+        block = create_lineup(preset="pilot-02").config()
+        specs = dict(block["specs"])
+        specs["casual"] = {**specs["casual"], "task": "changed"}
+        with self.assertRaises(ValueError):
+            lineup_from_config({**block, "specs": specs})
+
+    def test_changed_preset_membership_is_refused(self):
+        block = create_lineup(preset="pilot-02").config()
+        with self.assertRaises(ValueError):
+            lineup_from_config({**block, "advisors": ["bold", "cautious"]})
 
 
 class Pilot01CompatibilityTest(unittest.TestCase):
@@ -122,12 +149,11 @@ class AdvisorTaskTest(unittest.TestCase):
                     agent.persona.key: task
                     for system, task in backend.tasks
                     for agent in lineup.advisors
-                    if agent.persona and system.startswith(agent.instruction)
+                    if system.startswith(agent.instruction)
                 }
                 expected = {
                     agent.persona.key: agent.persona.task
                     for agent in lineup.advisors
-                    if agent.persona
                 }
                 self.assertEqual(sent, expected)
 

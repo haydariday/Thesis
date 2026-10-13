@@ -5,8 +5,9 @@ the debate line-up without editing the graph. The ``pilot-01`` preset keeps the
 exact pilot-01 instructions and tasks, so pilot-01 can still be re-run.
 """
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from typing import Any
 
 from .agent import Agent
 from .agent_role import AgentRole
@@ -166,6 +167,25 @@ class Lineup:
 
         return {agent.role.value: agent.instruction for agent in self.agents}
 
+    def config(self) -> dict[str, Any]:
+        """Keys and full persona text, for experiment configs and run metadata."""
+
+        return {
+            "preset": self.preset,
+            "gm": self.gm.persona.key,
+            "advisors": [agent.persona.key for agent in self.advisors],
+            "specs": {
+                agent.persona.key: {
+                    "display_name": agent.persona.display_name,
+                    "slot": agent.persona.slot.value,
+                    "instruction": agent.persona.instruction,
+                    "task": agent.persona.task,
+                    "action_rule": agent.persona.action_rule.value,
+                }
+                for agent in self.agents
+            },
+        }
+
 
 def _role_for(spec: PersonaSpec) -> AgentRole:
     return AgentRole.GM if spec.slot == Slot.GM else AgentRole(spec.key)
@@ -230,3 +250,31 @@ def create_lineup(
         preset=preset,
     )
 
+
+def lineup_from_config(
+    block: Mapping[str, Any] | None,
+    backend: ModelBackend | None = None,
+) -> Lineup:
+    """Rebuild a recorded line-up and refuse if the registry text has drifted.
+
+    ``None`` (a config written before personas were recorded) means the
+    ``pilot-01`` preset.
+    """
+
+    if block is None:
+        return create_lineup(backend, preset="pilot-01")
+
+    preset = block.get("preset")
+    lineup = create_lineup(
+        backend,
+        preset=preset,
+        gm=block["gm"],
+        advisors=None if preset is not None else block["advisors"],
+    )
+    if lineup.config() != dict(block):
+        raise ValueError(
+            "The persona registry no longer matches the recorded line-up "
+            f"({lineup.gm.persona.key}, {', '.join(block['advisors'])}); "
+            "a changed prompt is a new configuration."
+        )
+    return lineup

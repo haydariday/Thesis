@@ -13,7 +13,7 @@ from ..agent.backend import (
     ResponsesBackend,
     ScriptedBackend,
 )
-from ..agent.personas import create_lineup
+from ..agent.persona_args import add_persona_arguments, lineup_from_args
 from ..games.wordle.bridge import WordleBridge
 from ..games.wordle.dataset import load_allowed_guesses, load_puzzle
 from ..games.wordle.engine import WordleGame
@@ -123,7 +123,12 @@ def main() -> None:
         help="Maximum corrective responses per agent decision.",
     )
 
+    add_persona_arguments(parser, default_preset="pilot-02")
+
     args = parser.parse_args()
+    # Fail on bad persona flags before any API-key prompt.
+    lineup_from_args(parser, args)
+
     if args.play:
         if args.debate:
             parser.error(
@@ -242,7 +247,7 @@ def main() -> None:
             f"Backend: {args.backend} | model: {args.model}"
         )
 
-    lineup = create_lineup(backend, preset="pilot-01")
+    lineup = lineup_from_args(parser, args, backend)
     if args.play:
         puzzle = load_puzzle(
             path=args.dataset,
@@ -283,6 +288,7 @@ def main() -> None:
                     args.guess_list.read_bytes()
                 ).hexdigest(),
                 "agent_instructions": lineup.instructions(),
+                "personas": lineup.config(),
             },
             path=args.output,
         )

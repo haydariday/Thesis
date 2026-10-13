@@ -33,7 +33,7 @@ uv run python -m unittest multi_agent_testing.test.debate_flow_test.<Class>.<met
 Type checking: pyright, `standard` mode, configured in `pyrightconfig.json` (`extraPaths: ["src"]`). There is no linter or formatter configured.
 
 Other entry points (all `uv run python -m multi_agent_testing.…`):
-- `experiment.runner start|resume` — run a manifest of puzzles × repetitions into an experiment dir. Chunk long runs with `--max-seconds`, then `resume`. An existing dir must be resumed, not restarted.
+- `experiment.runner start|resume` — run a manifest of puzzles × repetitions into an experiment dir. `start` requires `--persona-preset` or `--advisors` (flags from `agent/persona_args.py`, shared with `debate_test`). Chunk long runs with `--max-seconds`, then `resume`. An existing dir must be resumed, not restarted. `resume` rebuilds personas from `settings.personas` and refuses if the registry text changed (`personas.lineup_from_config`).
 - `experiment.analysis --experiment-dir …` — pilot-01 metrics (stdlib only).
 - `experiment.manifest` — puzzle eligibility audit (`audit_record`, shared by later modules) and pilot-01 sampling.
 - `experiment.manifest_pilot02` — pilot-02 deep/wide manifests, stratified by quartile (see README for the command).
