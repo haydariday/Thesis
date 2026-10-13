@@ -1,11 +1,18 @@
 import unittest
+from datetime import UTC, datetime
 
 from ..agent.providers import (
     default_api_key_env,
     endpoint_error,
     extra_body,
+    peak_wait_seconds,
     settings_error,
 )
+
+
+def at(day: int, hour: int, minute: int = 0) -> datetime:
+    # October 2026: the 13th is a Tuesday, the 17th a Saturday.
+    return datetime(2026, 10, day, hour, minute, tzinfo=UTC)
 
 
 class EndpointTests(unittest.TestCase):
@@ -48,6 +55,27 @@ class SettingsTests(unittest.TestCase):
         self.assertIsNone(settings_error("zen", "chat", 0.2, None))
         self.assertIsNotNone(settings_error("zen", "chat", None, None))
         self.assertIsNone(settings_error("zen", "responses", None, None))
+
+
+class PeakHoursTests(unittest.TestCase):
+    def test_inside_a_window_waits_until_it_ends(self):
+        self.assertEqual(peak_wait_seconds("deepseek", at(13, 1, 30)), 2.5 * 3600)
+        self.assertEqual(peak_wait_seconds("deepseek", at(13, 9, 59)), 60)
+
+    def test_edges_and_off_peak(self):
+        self.assertEqual(peak_wait_seconds("deepseek", at(13, 4, 0)), 0)  # end is exclusive
+        self.assertEqual(peak_wait_seconds("deepseek", at(13, 0, 59)), 0)
+        self.assertEqual(peak_wait_seconds("deepseek", at(13, 12, 0)), 0)
+
+    def test_margin_avoids_starting_a_game_just_before_a_window(self):
+        # 00:58 plus a 3-minute margin reaches 01:00, so wait until 04:00.
+        self.assertEqual(peak_wait_seconds("deepseek", at(13, 0, 58), 180), 3 * 3600 + 2 * 60)
+        self.assertEqual(peak_wait_seconds("deepseek", at(13, 0, 56), 180), 0)
+
+    def test_weekends_and_other_backends_never_pause(self):
+        self.assertEqual(peak_wait_seconds("deepseek", at(17, 2, 0)), 0)  # Saturday
+        self.assertEqual(peak_wait_seconds("zen", at(13, 2, 0)), 0)
+        self.assertEqual(peak_wait_seconds("ollama", at(13, 2, 0)), 0)
 
 
 class ProviderDefaultsTests(unittest.TestCase):

@@ -1,6 +1,7 @@
 """Hosted OpenAI-compatible providers: endpoint checks, key names and extras."""
 
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from typing import Any
 from urllib.parse import urlparse
 
@@ -11,6 +12,8 @@ class Provider:
     api_key_env: str
     # DeepSeek's thinking mode ignores temperature, so the mode must be explicit.
     has_thinking_switch: bool = False
+    # Weekday UTC hours [start, end) billed at the peak rate.
+    peak_hours_utc: tuple[tuple[int, int], ...] = ()
 
 
 PROVIDERS = {
@@ -19,6 +22,10 @@ PROVIDERS = {
         hostname="api.deepseek.com",
         api_key_env="DEEPSEEK_API_KEY",
         has_thinking_switch=True,
+        # https://api-docs.deepseek.com/quick_start/pricing: peak prices are
+        # double, Monday to Friday. Chinese public holidays are off-peak but
+        # are not modelled, so a run pauses needlessly on those days.
+        peak_hours_utc=((1, 4), (6, 10)),
     ),
 }
 
@@ -92,6 +99,35 @@ def request_options_error(
     if max_tokens is not None and max_tokens < 1:
         return "--max-tokens must be positive."
     return None
+
+
+def peak_wait_seconds(
+    backend: str,
+    now: datetime,
+    margin_seconds: float = 0.0,
+) -> float:
+    """Seconds to wait so that no request falls in a peak-price window.
+
+    Returns 0 when ``now`` is off-peak and no window starts within
+    ``margin_seconds``; otherwise the time until that window ends.  ``now``
+    must be timezone-aware UTC.
+    """
+
+    provider = PROVIDERS.get(backend)
+    if provider is None or not provider.peak_hours_utc:
+        return 0.0
+
+    margin = timedelta(seconds=margin_seconds)
+    midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    for day in (midnight - timedelta(days=1), midnight, midnight + timedelta(days=1)):
+        if day.weekday() >= 5:
+            continue
+        for start_hour, end_hour in provider.peak_hours_utc:
+            start = day + timedelta(hours=start_hour)
+            end = day + timedelta(hours=end_hour)
+            if start - margin <= now < end:
+                return (end - now).total_seconds()
+    return 0.0
 
 
 def default_api_key_env(backend: str) -> str | None:

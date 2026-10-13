@@ -19,9 +19,11 @@ class LoggedSuggestion(TypedDict):
 
     round: int
     advisor: str
-    action: str
+    # None when the advisor abstained after exhausting its repairs.
+    action: str | None
     # The GM proposal the advisor was answering.
     gm_proposal: str
+    abstained: bool
 
 
 class DebateState(TypedDict):
@@ -32,6 +34,8 @@ class DebateState(TypedDict):
     suggestions: dict[str, Suggestion]
     # Every round's suggestions, in speaking order.
     suggestion_log: list[LoggedSuggestion]
+    # Recovery steps taken this turn, e.g. "abstained:bold".
+    fallbacks: list[str]
     transcript: list[str]
     final_action: str
     round: int
@@ -49,6 +53,7 @@ def new_debate_state(context: str, max_rounds: int) -> DebateState:
         "initial_proposal": "",
         "suggestions": {},
         "suggestion_log": [],
+        "fallbacks": [],
         "transcript": [],
         "final_action": "",
         "round": 0,

@@ -33,8 +33,16 @@ def turn_statistics(
     suggestions = [
         {
             **entry,
-            "agreed": entry["action"] == entry["gm_proposal"],
-            "is_candidate": is_consistent(entry["action"], history),
+            "agreed": (
+                None
+                if entry["action"] is None
+                else entry["action"] == entry["gm_proposal"]
+            ),
+            "is_candidate": (
+                None
+                if entry["action"] is None
+                else is_consistent(entry["action"], history)
+            ),
         }
         for entry in log
     ]
@@ -53,12 +61,15 @@ def turn_statistics(
                 for entry in log
             )
         ],
-        # True when the advisor returned the GM's proposal in every round.
+        # True when the advisor returned the GM's proposal in every round it
+        # spoke; None when it abstained in every round.
         "advisor_agreed": {
-            key: all(
-                entry["agreed"]
-                for entry in suggestions
-                if entry["advisor"] == key
+            key: (
+                all(answered) if (answered := [
+                    entry["agreed"]
+                    for entry in suggestions
+                    if entry["advisor"] == key and entry["agreed"] is not None
+                ]) else None
             )
             for key in advisor_keys
         },
@@ -69,6 +80,7 @@ def turn_statistics(
         "candidates_remaining": (
             len(candidates) if candidates is not None else None
         ),
+        "fallbacks": list(result.get("fallbacks") or []),
     }
 
 

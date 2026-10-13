@@ -4,6 +4,7 @@ import json
 import sys
 import tempfile
 import unittest
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest import mock
 
@@ -159,6 +160,33 @@ class RunnerPersonaTest(unittest.TestCase):
         self.assertEqual(settings["api_key_env"], "DEEPSEEK_API_KEY")
         run = json.loads((self.experiment / "runs" / "puzzle-0-rep1-attempt1.json").read_text(encoding="utf-8"))
         self.assertEqual(run["metadata"]["thinking"], "disabled")
+
+    def start_deepseek_at(self, now: datetime, *extra: str) -> list[float]:
+        sleeps: list[float] = []
+        with (
+            mock.patch.object(runner, "_utcnow", return_value=now),
+            mock.patch.object(runner, "_sleep", side_effect=sleeps.append),
+        ):
+            self.start(
+                "--persona-preset", "pilot-02", *extra,
+                backend=(*DEEPSEEK, "--thinking", "disabled", "--temperature", "0.2"),
+            )
+        return sleeps
+
+    def test_deepseek_pauses_during_peak_hours(self):
+        tuesday_2am = datetime(2026, 10, 13, 2, 0, tzinfo=UTC)
+
+        self.assertEqual(self.start_deepseek_at(tuesday_2am), [2 * 3600])
+        run = json.loads((self.experiment / "runs" / "puzzle-0-rep1-attempt1.json").read_text(encoding="utf-8"))
+        self.assertEqual(run["status"], "completed")
+
+    def test_allow_peak_does_not_pause(self):
+        tuesday_2am = datetime(2026, 10, 13, 2, 0, tzinfo=UTC)
+
+        self.assertEqual(self.start_deepseek_at(tuesday_2am, "--allow-peak"), [])
+
+    def test_off_peak_does_not_pause(self):
+        self.assertEqual(self.start_deepseek_at(datetime(2026, 10, 13, 12, 0, tzinfo=UTC)), [])
 
     def test_deepseek_rejects_settings_that_would_mislead(self):
         cases = [

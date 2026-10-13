@@ -67,6 +67,26 @@ class WordleEngineTests(unittest.TestCase):
 
 
 
+class ValidationMessageTests(unittest.TestCase):
+    """Repair messages must say what is wrong, never reveal the answer."""
+
+    def test_messages_name_the_problem(self):
+        game = WordleGame(WordlePuzzle("t", "CIGAR"), allowed_guesses=["CIGAR", "SLATE", "CRANE"])
+        game.guess("SLATE")
+
+        cases = {
+            "T?E?E": "'T?E?E' is not a five-letter word",
+            "THIRST": "'THIRST' is not a five-letter word",
+            "SCOCK": "SCOCK is not in the allowed vocabulary",
+            "SLATE": "SLATE was already played. Already played: SLATE.",
+        }
+        for action, expected in cases.items():
+            with self.subTest(action=action), self.assertRaises(ValueError) as raised:
+                game.validate_guess(action)
+            self.assertIn(expected, str(raised.exception))
+            self.assertNotIn("CIGAR", str(raised.exception))
+
+
 class CandidateTests(unittest.TestCase):
     # RAISE against CIGAR scores YYYBB. VIRAL scores the same, so it stays a
     # candidate; CRANE and SLATE do not.

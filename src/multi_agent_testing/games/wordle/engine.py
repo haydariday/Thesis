@@ -9,7 +9,11 @@ def normalize_guess(value: str) -> str:
     word = value.strip().upper()
 
     if len(word) != 5 or not word.isascii() or not word.isalpha():
-        raise ValueError("Guess must contain five ASCII letters.")
+        shown = value if len(value) <= 40 else value[:37] + "..."
+        raise ValueError(
+            f"{shown!r} is not a five-letter word. The action must be exactly "
+            "five letters A-Z, with no '?', '_', spaces or patterns."
+        )
 
     return word
 
@@ -116,12 +120,15 @@ class WordleGame:
 
         if self._allowed is not None and word not in self._allowed:
             raise ValueError(
-                "Guess is outside the allowed vocabulary."
+                f"{word} is not in the allowed vocabulary. "
+                "Use one real five-letter English word."
             )
 
         if any(result.guess == word for result in self._history):
+            played = ", ".join(result.guess for result in self._history)
             raise ValueError(
-                "This prototype does not allow repeated guesses."
+                f"{word} was already played. Already played: {played}. "
+                "Choose a word that has not been played."
             )
 
         return word

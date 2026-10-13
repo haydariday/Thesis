@@ -18,7 +18,7 @@ import os
 import subprocess
 import sys
 import time
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from importlib import metadata as importlib_metadata
 from pathlib import Path
 
@@ -33,6 +33,7 @@ from ..agent.providers import (
     default_api_key_env,
     endpoint_error,
     extra_body,
+    peak_wait_seconds,
     request_options_error,
     settings_error,
 )
@@ -48,6 +49,17 @@ from ..run_log import RunLog
 from .summary import write_summary
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
+
+# A game takes about a minute, so do not start one this close to a peak window.
+PEAK_MARGIN_SECONDS = 180.0
+
+
+def _utcnow() -> datetime:
+    return datetime.now(UTC)
+
+
+def _sleep(seconds: float) -> None:
+    time.sleep(seconds)
 
 
 def file_hash(path: Path) -> str:
@@ -312,6 +324,7 @@ def execute_plan(
     *,
     max_runs: int | None = None,
     max_seconds: float | None = None,
+    allow_peak: bool = False,
 ) -> None:
     settings = config["settings"]
     runs_dir = experiment_dir / "runs"
@@ -339,6 +352,7 @@ def execute_plan(
     )
 
     started_at = time.perf_counter()
+    paused_seconds = 0.0
     runs_done = 0
     completed_runs = 0
 
@@ -351,7 +365,7 @@ def execute_plan(
             if (
                 max_seconds is not None
                 and runs_done > 0
-                and time.perf_counter() - started_at >= max_seconds
+                and time.perf_counter() - started_at - paused_seconds >= max_seconds
             ):
                 print(
                     f"Stopping after {max_seconds:.0f} seconds of work."
@@ -384,6 +398,20 @@ def execute_plan(
                     f"{repetition}: stale attempt file exists, skipped"
                 )
                 continue
+
+            if not allow_peak:
+                wait = peak_wait_seconds(
+                    settings["backend"], _utcnow(), PEAK_MARGIN_SECONDS
+                )
+                if wait > 0:
+                    until = _utcnow() + timedelta(seconds=wait)
+                    print(
+                        f"Peak-price hours for {settings['backend']}: pausing "
+                        f"until {until:%Y-%m-%d %H:%M} UTC. Ctrl-C is safe; "
+                        "resume later."
+                    )
+                    _sleep(wait)
+                    paused_seconds += wait
 
             if puzzle_id not in puzzle_cache:
                 puzzle_cache[puzzle_id] = load_puzzle(
@@ -553,6 +581,7 @@ def run_start(parser, args) -> None:
         config,
         max_runs=args.max_runs,
         max_seconds=args.max_seconds,
+        allow_peak=args.allow_peak,
     )
 
 
@@ -607,6 +636,7 @@ def run_resume(args) -> None:
         config,
         max_runs=args.max_runs,
         max_seconds=args.max_seconds,
+        allow_peak=args.allow_peak,
     )
 
 
@@ -621,7 +651,15 @@ def add_run_controls(parser: argparse.ArgumentParser) -> None:
         "--max-seconds",
         type=float,
         default=None,
-        help="Stop after this many seconds, checked between attempts.",
+        help="Stop after this many seconds of work, checked between attempts.",
+    )
+    parser.add_argument(
+        "--allow-peak",
+        action="store_true",
+        help=(
+            "DeepSeek only: keep starting games during peak-price hours "
+            "(default: pause until off-peak)."
+        ),
     )
 
 

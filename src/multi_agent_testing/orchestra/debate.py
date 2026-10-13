@@ -12,6 +12,10 @@ from .debate_context import DebateState, NodeFn, Termination
 from .flow.sequential import FINALIZE, NEXT_ROUND, build_sequential_graph
 
 
+class RepairExhausted(ValueError):
+    """An agent's reply stayed invalid after every allowed repair."""
+
+
 def create_debate_graph(
     lineup: Lineup,
     *,
@@ -190,7 +194,7 @@ def create_debate_graph(
             print(f"Rejected response: {error}")
 
             if attempt == max_repairs:
-                raise ValueError(
+                raise RepairExhausted(
                     f"{agent.name} failed validation after "
                     f"{max_repairs + 1} attempt(s): {error}"
                 ) from error
@@ -207,6 +211,7 @@ def create_debate_graph(
                     "and the game rules. "
                     "Return only the required JSON. "
                     "Keep your assigned role. "
+                    "Do not repeat the rejected action. "
                     "This is a correction within the same turn, "
                     "not a new round."
                 ),
@@ -236,7 +241,25 @@ def create_debate_graph(
         verb = "defends" if spec.action_rule == ActionRule.MUST_EQUAL else "suggests"
 
         def node(state: DebateState) -> dict:
-            decision = ask(agent, state, spec.task, action_rule=spec.action_rule)
+            try:
+                decision = ask(agent, state, spec.task, action_rule=spec.action_rule)
+            except RepairExhausted:
+                # Advice is optional: the GM reviews without this advisor.
+                return {
+                    "suggestion_log": state["suggestion_log"] + [
+                        {
+                            "round": state["round"] + 1,
+                            "advisor": spec.key,
+                            "action": None,
+                            "gm_proposal": state["proposal"],
+                            "abstained": True,
+                        }
+                    ],
+                    "fallbacks": state["fallbacks"] + [f"abstained:{spec.key}"],
+                    "transcript": state["transcript"] + [
+                        f"{agent.name} abstains: no valid suggestion this round."
+                    ],
+                }
 
             return {
                 "suggestions": {
@@ -252,6 +275,7 @@ def create_debate_graph(
                         "advisor": spec.key,
                         "action": decision.action,
                         "gm_proposal": state["proposal"],
+                        "abstained": False,
                     }
                 ],
                 "transcript": state["transcript"] + [
@@ -262,15 +286,27 @@ def create_debate_graph(
         return spec.key, node
 
     def gm_review(state: DebateState) -> dict:
-        decision = ask(
-            gm,
-            state,
-            "Review every advisor's suggestion and the full transcript. "
-            "Retain or revise the proposal. Set stop to true only if another "
-            "round is unlikely to change your decision; otherwise false. "
-            "Do not claim unanimous agreement without evidence.",
-            allow_stop=True,
-        )
+        try:
+            decision = ask(
+                gm,
+                state,
+                "Review every advisor's suggestion and the full transcript. "
+                "Retain or revise the proposal. Set stop to true only if another "
+                "round is unlikely to change your decision; otherwise false. "
+                "Do not claim unanimous agreement without evidence.",
+                allow_stop=True,
+            )
+        except RepairExhausted:
+            # The standing proposal was already validated, so keep it.
+            return {
+                "suggestions": {},
+                "round": state["round"] + 1,
+                "stop": False,
+                "fallbacks": state["fallbacks"] + ["gm_review_kept_proposal"],
+                "transcript": state["transcript"] + [
+                    f"GM review gave no valid decision; {state['proposal']} stands."
+                ],
+            }
 
         return {
             "proposal": decision.action,

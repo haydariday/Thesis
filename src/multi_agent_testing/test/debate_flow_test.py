@@ -154,8 +154,9 @@ class DebateFlowTests(unittest.TestCase):
                 run.path.read_text(encoding="utf-8")
             )
 
+        # The GM's first proposal has no fallback, so the game still fails.
         self.assertEqual(run.data["status"], "failed")
-        self.assertEqual(run.data["error"]["type"], "ValueError")
+        self.assertEqual(run.data["error"]["type"], "RepairExhausted")
         self.assertEqual(saved["status"], "failed")
         self.assertEqual(run.data["outcome"]["guesses_used"], 0)
         self.assertIsNone(run.data["outcome"]["won"])
@@ -334,6 +335,78 @@ class DebateFlowTests(unittest.TestCase):
             all(call["rejected_text"] is None for call in run.data["calls"] if not call["rejected"])
         )
         self.assertIn("cut off", backend.calls[2][1]["repair"]["validation_error"])
+
+    def test_advisor_that_exhausts_repairs_abstains(self):
+        backend = RecordingSequenceBackend(
+            [
+                completion("RAISE", False),
+                completion("AUDIO", False),  # Bold: not in the vocabulary
+                completion("T?A?E", False),  # Bold repair: still invalid
+                completion("CRANE", False),
+                completion("RAISE", False),
+                completion("CRANE", True),
+            ]
+        )
+        run = self.play(backend, "pilot-02", self.make_pilot_02_game(), max_rounds=1)
+        turn = run.data["turns"][0]
+
+        self.assertEqual(run.data["status"], "completed")
+        self.assertEqual(turn["final_action"], "CRANE")
+        self.assertEqual(turn["fallbacks"], ["abstained:bold"])
+        bold = turn["advisor_suggestions"][0]
+        self.assertEqual((bold["advisor"], bold["action"], bold["abstained"]), ("bold", None, True))
+        self.assertIsNone(bold["agreed"])
+        self.assertIsNone(turn["advisor_agreed"]["bold"])
+        # The GM reviews without a Bold suggestion but sees the abstention.
+        review = backend.calls[-1][1]
+        self.assertEqual(list(review["suggestions"]), ["cautious", "casual"])
+        self.assertIn("Bold Advisor abstains", review["transcript"][1])
+        # The repair named the problem in plain terms.
+        repair = backend.calls[2][1]["repair"]
+        self.assertIn("AUDIO is not in the allowed vocabulary", repair["validation_error"])
+        self.assertIn("Do not repeat the rejected action", repair["instruction"])
+
+    def test_gm_review_that_exhausts_repairs_keeps_the_proposal(self):
+        backend = SequenceBackend(
+            [
+                completion("RAISE", False),
+                completion("SLATE", False),
+                completion("CRANE", False),
+                completion("RAISE", False),
+                completion("RAISE?", False),  # review: invalid
+                completion("TOOLONG", False),  # review repair: invalid
+            ]
+        )
+        run = self.play(backend, "pilot-02", self.make_pilot_02_game(), max_rounds=1)
+        turn = run.data["turns"][0]
+
+        self.assertEqual(run.data["status"], "completed")
+        self.assertEqual(turn["final_action"], "RAISE")
+        self.assertEqual(turn["fallbacks"], ["gm_review_kept_proposal"])
+        self.assertEqual(turn["termination"], "max_rounds")
+
+    def test_repeated_guess_repair_lists_played_words(self):
+        game = WordleGame(
+            WordlePuzzle("0", "CIGAR"),
+            allowed_guesses={"CIGAR", "CRANE", "RAISE", "SLATE"},
+            max_attempts=2,
+        )
+        backend = RecordingSequenceBackend(
+            [completion("SLATE", False)] * 4
+            + [completion("SLATE", True)]
+            + [completion("SLATE", False), completion("RAISE", False)]
+            + [completion("RAISE", False)] * 3
+            + [completion("RAISE", True)]
+        )
+        run = self.play(backend, "pilot-02", game, max_rounds=1)
+
+        self.assertEqual(run.data["status"], "completed")
+        message = backend.calls[6][1]["repair"]["validation_error"]
+        self.assertEqual(
+            message,
+            "SLATE was already played. Already played: SLATE. "
+            "Choose a word that has not been played.",
+        )
 
     def test_missing_stop_means_continue_without_a_repair(self):
         no_stop = Completion(text='{"action": "SLATE", "reason": "test reason"}')

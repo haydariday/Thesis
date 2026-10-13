@@ -62,6 +62,11 @@ class PersonaStatsTest(unittest.TestCase):
             turn("GRAPE", "GRAPE", [], ("GRAPE", True), ("CHOMP", False)),
         ])
         write_run(self.runs, "c", "5", 3, [turn("SLATE", "SLATE", [], ("X", True), ("Y", True))], status="failed")
+        # Game 3: Cautious abstains on turn 2; that is neither a candidate nor a non-candidate.
+        abstaining = turn("BRAKE", "BRAKE", [], ("GRAPE", True), ("NONE", True))
+        abstaining["advisor_suggestions"][1].update(action=None, abstained=True, is_candidate=None, agreed=None)
+        abstaining["advisor_agreed"]["cautious"] = None
+        write_run(self.runs, "d", "6", 1, [turn("SLATE", "SLATE", [], ("SLATE", True), ("CRANE", True)), abstaining])
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -70,15 +75,15 @@ class PersonaStatsTest(unittest.TestCase):
         games = load_games(self.runs)
         stats = persona_statistics(games, seed=1, resamples=200)
 
-        self.assertEqual(stats["games"], 2)  # the failed run is left out
-        self.assertEqual(stats["turns"], 4)
-        self.assertEqual(stats["gm_retention_rate"], 0.5)
-        self.assertEqual(stats["final_non_candidate_share"], 0.5)
+        self.assertEqual(stats["games"], 3)  # the failed run is left out
+        self.assertEqual(stats["turns"], 6)
+        self.assertEqual(stats["gm_retention_rate"], 4 / 6)
         bold, cautious = stats["advisors"]["bold"], stats["advisors"]["cautious"]
         self.assertEqual((bold["adopted"], cautious["adopted"]), (1, 1))
-        self.assertEqual(bold["agreed"], 2)  # SLATE in game 1, GRAPE in game 2
-        self.assertEqual((bold["non_candidate"], bold["suggestions_after_turn_1"]), (0, 2))
+        self.assertEqual(bold["agreed"], 3)  # SLATE in games 1 and 3, GRAPE in game 2
+        self.assertEqual((bold["non_candidate"], bold["suggestions_after_turn_1"]), (0, 3))
         self.assertEqual((cautious["non_candidate"], cautious["suggestions_after_turn_1"]), (2, 2))
+        self.assertEqual((cautious["abstained"], bold["abstained"]), (1, 0))
         check = stats["manipulation_check"]
         self.assertEqual(check["point"], 1.0)
         self.assertLessEqual(check["ci_low"], check["point"])
@@ -87,9 +92,9 @@ class PersonaStatsTest(unittest.TestCase):
         rows = opener_rows("deep", load_games(self.runs))
 
         turn_one = [(r["word"], r["source"], r["count"]) for r in rows if r["turn"] == 1]
-        self.assertEqual(turn_one, [("CRANE", "bold", 1), ("SLATE", "gm", 1)])
+        self.assertEqual(turn_one, [("SLATE", "gm", 2), ("CRANE", "bold", 1)])
         self.assertTrue(all(r["puzzle_id"] == "all" for r in rows if r["turn"] == 1))
-        self.assertEqual({r["puzzle_id"] for r in rows if r["turn"] == 2}, {"5"})
+        self.assertEqual({r["puzzle_id"] for r in rows if r["turn"] == 2}, {"5", "6"})
 
 
 if __name__ == "__main__":

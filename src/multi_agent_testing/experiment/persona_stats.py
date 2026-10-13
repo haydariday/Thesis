@@ -72,7 +72,7 @@ def non_candidate_counts(games: Sequence[Game], advisor: str) -> tuple[int, int]
     for game in games:
         for turn in game.turns[1:]:
             for item in turn.get("advisor_suggestions") or []:
-                if item.get("advisor") == advisor:
+                if item.get("advisor") == advisor and not item.get("abstained"):
                     total += 1
                     bad += not item.get("is_candidate", True)
     return bad, total
@@ -131,7 +131,14 @@ def persona_statistics(
         adopted = sum(key in (turn.get("adopted_from") or []) for turn in turns)
         agreed = sum(bool((turn.get("advisor_agreed") or {}).get(key)) for turn in turns)
         bad, total = non_candidate_counts(games, key)
+        abstained = sum(
+            1
+            for turn in turns
+            for item in turn.get("advisor_suggestions") or []
+            if item.get("advisor") == key and item.get("abstained")
+        )
         per_advisor[key] = {
+            "abstained": abstained,
             "turns": len(turns),
             "adopted": adopted,
             "adoption_rate": _share(adopted, len(turns)),
