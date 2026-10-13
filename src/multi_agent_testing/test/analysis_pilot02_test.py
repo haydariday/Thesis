@@ -162,7 +162,8 @@ class EndToEndTest(unittest.TestCase):
     def run_experiment(self, directory: Path, repetitions: int) -> None:
         manifest = directory.parent / f"{directory.name}-manifest.csv"
         manifest.write_text(
-            "puzzle_id,answer,human_mean_score,quartile\n0,CIGAR,4.16,D2\n",
+            "puzzle_id,answer,human_mean_score,quartile,p1,p2,p3,p4,p5,p6,p7\n"
+            "0,CIGAR,4.16,D2,0.0,0.03,0.23,0.4,0.25,0.07,0.02\n",
             encoding="utf-8",
         )
         backend = ScriptedBackend(response='{"action": "CIGAR", "reason": "scripted", "stop": false}')
@@ -192,7 +193,12 @@ class EndToEndTest(unittest.TestCase):
             self.run_experiment(root / "wide", repetitions=2)
             output = root / "analysis"
 
-            with contextlib.redirect_stdout(io.StringIO()):
+            # Lower the run threshold so the 3-run deep experiment gets the
+            # distribution comparison that 32-run Exp A will get.
+            with (
+                contextlib.redirect_stdout(io.StringIO()),
+                mock.patch.object(analysis, "MIN_RUNS_FOR_DISTRIBUTION", 3),
+            ):
                 analysis.main([
                     "--deep", str(root / "deep"),
                     "--wide", str(root / "wide"),
@@ -213,6 +219,19 @@ class EndToEndTest(unittest.TestCase):
             rows = (output / "puzzle_summary.csv").read_text(encoding="utf-8").splitlines()
             self.assertEqual(len(rows), 3)  # header plus one puzzle per experiment
             self.assertIn("deep,0,CIGAR,D2,4.16", rows[1])
+
+            # Every run solves in 1, so W1 equals the whole mean gap: 4.16 - 1.
+            self.assertAlmostEqual(deep["distribution"]["mean_w1"], 3.16)
+            self.assertIsNone(metrics["experiments"]["wide"]["distribution"])
+            distribution = (output / "distribution_summary.csv").read_text(encoding="utf-8").splitlines()
+            self.assertEqual(len(distribution), 2)  # deep only
+
+            self.assertEqual(deep["personas"]["games"], 3)
+            self.assertEqual(deep["personas"]["gm_retention_rate"], 1.0)
+            openers = (output / "openers.csv").read_text(encoding="utf-8").splitlines()
+            self.assertIn("deep,1,all,CIGAR,gm,3", openers)
+            personas = (output / "persona_stats.csv").read_text(encoding="utf-8").splitlines()
+            self.assertEqual(len(personas), 1 + 2 * 4)  # GM plus 3 advisors, per experiment
 
 
 if __name__ == "__main__":

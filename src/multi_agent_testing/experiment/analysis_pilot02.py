@@ -1,10 +1,12 @@
-"""Pilot-02 analysis (P12): RQ1 consistency and RQ2 mean and D1-D4 agreement.
+"""Pilot-02 analysis: RQ1 consistency, RQ2 agreement and persona statistics.
 
 Reads one or both pilot-02 experiment directories (``--deep`` for Exp A,
 ``--wide`` for Exp B), each holding ``experiment_config.json``,
 ``manifest.csv``, ``run_summary.csv`` and ``runs/``, plus the frozen
-``quartiles.json``.  Writes ``metrics.json`` and ``puzzle_summary.csv`` into
-``--output-dir``.  Only the Python standard library is used.
+``quartiles.json``.  Writes ``metrics.json``, ``puzzle_summary.csv``,
+``distribution_summary.csv`` (P13), ``persona_stats.csv`` (P13) and
+``openers.csv`` (P13) into ``--output-dir``.  Only the Python standard
+library is used.
 
 Usage::
 
@@ -26,6 +28,12 @@ Study conventions encoded here:
 * CIs come from a puzzle-level bootstrap stratified by human quartile, so
   every resample keeps the design's quartile balance.  Runs are never
   treated as independent puzzles.
+* The 7-bin distribution comparison (W1 primary; JSD, TVD and chi-square
+  secondary) needs many runs per puzzle, so it covers experiments planned
+  with at least ``MIN_RUNS_FOR_DISTRIBUTION`` runs (Exp A).  Its CIs
+  resample runs within a puzzle against the fixed human shares.
+* Persona statistics are descriptive (plan Section 2.3).  Non-candidate
+  shares leave out turn 1, where every word is still a candidate.
 * Deep and wide are pooled only when their configurations, code revision
   and model fingerprints match (README reuse rule 1).  The pooled block is
   a robustness check, never the primary result.
@@ -59,10 +67,21 @@ from .analysis import (
     load_run_attempts,
     planned_repetitions,
 )
+from .distribution import (
+    chi_square_gof,
+    jensen_shannon,
+    score_distribution,
+    split_half_w1,
+    total_variation,
+    wasserstein_1,
+)
+from .persona_stats import load_games, opener_rows, persona_statistics
 from .quartiles import QUARTILE_LABELS, map_score
 
 DEFAULT_SEED = 20261015
 LOSS_SCORE = 7.0
+MIN_RUNS_FOR_DISTRIBUTION = 10
+HUMAN_BINS = ("p1", "p2", "p3", "p4", "p5", "p6", "p7")
 
 # Settings that may differ between Exp A and Exp B without breaking pooling.
 DESIGN_SETTINGS = frozenset({"repetitions"})
@@ -90,6 +109,49 @@ PUZZLE_SUMMARY_COLUMNS = (
     "mean_pairwise_abs_diff",
 )
 
+DISTRIBUTION_COLUMNS = (
+    "experiment",
+    "puzzle_id",
+    "answer",
+    "human_quartile",
+    "runs",
+    *(f"system_{b}" for b in HUMAN_BINS),
+    *(f"human_{b}" for b in HUMAN_BINS),
+    "w1",
+    "w1_ci_low",
+    "w1_ci_high",
+    "jsd",
+    "jsd_ci_low",
+    "jsd_ci_high",
+    "tvd",
+    "tvd_ci_low",
+    "tvd_ci_high",
+    "chi_square",
+    "chi_square_df",
+    "chi_square_p",
+    "chi_square_bins",
+    "mean_shift",
+    "fail_share_shift",
+    "split_half_w1",
+    "split_half_random_mean",
+    "split_half_random_share_above",
+)
+
+PERSONA_COLUMNS = (
+    "experiment",
+    "agent",
+    "turns",
+    "retained_or_adopted",
+    "rate",
+    "agreed",
+    "agreement_rate",
+    "suggestions_after_turn_1",
+    "non_candidate",
+    "non_candidate_share",
+)
+
+OPENER_COLUMNS = ("experiment", "turn", "puzzle_id", "word", "source", "count")
+
 
 @dataclass(frozen=True)
 class PuzzleRuns:
@@ -107,6 +169,8 @@ class PuzzleRuns:
     wins: int
     losses: int
     failed_attempts: int
+    # Human shares p1..p7 from the manifest, empty when not recorded.
+    human_bins: tuple[float, ...] = ()
 
     @property
     def system_mean(self) -> float | None:
@@ -169,6 +233,13 @@ def load_experiment(name: str, directory: Path) -> Experiment:
     attempts = load_run_attempts(directory / "run_summary.csv")
     planned = planned_repetitions(config)
 
+    # Run order matters for split-half checks, and RunAttempt has no repetition.
+    with (directory / "run_summary.csv").open("r", encoding="utf-8", newline="") as file:
+        repetition = {
+            (row.get("run_id") or "").strip(): int(float(row.get("repetition") or 1))
+            for row in csv.DictReader(file)
+        }
+
     by_puzzle: dict[str, list] = {}
     for attempt in attempts:
         by_puzzle.setdefault(attempt.puzzle_id, []).append(attempt)
@@ -186,10 +257,14 @@ def load_experiment(name: str, directory: Path) -> Experiment:
                 )
 
             rows = by_puzzle.get(puzzle_id, [])
-            completed = [
-                a for a in rows
-                if a.status == "completed" and a.penalized_score is not None
-            ]
+            completed = sorted(
+                (
+                    a for a in rows
+                    if a.status == "completed" and a.penalized_score is not None
+                ),
+                key=lambda a: repetition.get(a.run_id, 0),
+            )
+            bins = [_parse_float(row.get(name)) for name in HUMAN_BINS]
             puzzles.append(
                 PuzzleRuns(
                     experiment=name,
@@ -205,6 +280,11 @@ def load_experiment(name: str, directory: Path) -> Experiment:
                     losses=sum(1 for a in completed if a.won is False),
                     failed_attempts=sum(
                         1 for a in rows if a.status in INFRA_STATUSES
+                    ),
+                    human_bins=(
+                        tuple(b for b in bins if b is not None)
+                        if all(b is not None for b in bins)
+                        else ()
                     ),
                 )
             )
@@ -479,6 +559,121 @@ def stratified_bootstrap(
 
 
 # ---------------------------------------------------------------------------
+# RQ2: distribution comparison (P13)
+# ---------------------------------------------------------------------------
+
+
+def distances(scores: Sequence[float], human: Sequence[float]) -> dict[str, float]:
+    system = score_distribution(scores)
+    return {
+        "w1": wasserstein_1(system, human),
+        "jsd": jensen_shannon(system, human),
+        "tvd": total_variation(system, human),
+    }
+
+
+def run_bootstrap(
+    scores: Sequence[float],
+    human: Sequence[float],
+    seed: int,
+    resamples: int,
+) -> dict[str, tuple[float | None, float | None]]:
+    """Percentile CIs for each distance, resampling one puzzle's runs."""
+
+    rng = random.Random(seed)
+    draws: dict[str, list[float]] = {"w1": [], "jsd": [], "tvd": []}
+    for _ in range(resamples):
+        sample = [scores[rng.randrange(len(scores))] for _ in scores]
+        for name, value in distances(sample, human).items():
+            draws[name].append(value)
+    return {
+        name: (
+            _percentile(sorted(values), CI_LOW_FRACTION),
+            _percentile(sorted(values), CI_HIGH_FRACTION),
+        )
+        for name, values in draws.items()
+    }
+
+
+def distribution_rows(
+    experiment: Experiment,
+    seed: int,
+    resamples: int,
+) -> list[dict[str, Any]]:
+    """One row per puzzle with at least two runs and recorded human shares."""
+
+    rows = []
+    for offset, p in enumerate(experiment.puzzles):
+        if len(p.scores) < 2 or len(p.human_bins) != len(HUMAN_BINS):
+            continue
+
+        system = score_distribution(p.scores)
+        point = distances(p.scores, p.human_bins)
+        cis = run_bootstrap(p.scores, p.human_bins, seed + offset, resamples)
+        chi = chi_square_gof(p.scores, p.human_bins)
+        split = split_half_w1(p.scores, seed + offset)
+        human_mean = sum((k + 1) * share for k, share in enumerate(p.human_bins))
+        mean = p.system_mean
+
+        rows.append(
+            {
+                "experiment": p.experiment,
+                "puzzle_id": p.puzzle_id,
+                "answer": p.answer,
+                "human_quartile": p.human_quartile,
+                "runs": len(p.scores),
+                **{f"system_{b}": share for b, share in zip(HUMAN_BINS, system)},
+                **{f"human_{b}": share for b, share in zip(HUMAN_BINS, p.human_bins)},
+                **{
+                    key: value
+                    for name in ("w1", "jsd", "tvd")
+                    for key, value in (
+                        (name, point[name]),
+                        (f"{name}_ci_low", cis[name][0]),
+                        (f"{name}_ci_high", cis[name][1]),
+                    )
+                },
+                "chi_square": chi["statistic"],
+                "chi_square_df": chi["df"],
+                "chi_square_p": chi["p_value"],
+                "chi_square_bins": chi["merged_bins"],
+                # Against the mean of the human bins, so both sides use the
+                # same 7-bin scoring.
+                "mean_shift": mean - human_mean if mean is not None else None,
+                "fail_share_shift": system[-1] - p.human_bins[-1],
+                "split_half_w1": split["observed"],
+                "split_half_random_mean": split["random_mean"],
+                "split_half_random_share_above": split["random_share_above"],
+            }
+        )
+    return rows
+
+
+def distribution_summary(rows: Sequence[dict[str, Any]]) -> dict[str, Any]:
+    """Across-puzzle summary; per-puzzle values and CIs stay in the CSV."""
+
+    def mean_of(key: str) -> float | None:
+        values = [row[key] for row in rows if row[key] is not None]
+        return statistics.fmean(values) if values else None
+
+    tested = [row for row in rows if row["chi_square_p"] is not None]
+    return {
+        "puzzles": len(rows),
+        "mean_w1": mean_of("w1"),
+        "median_w1": statistics.median(row["w1"] for row in rows) if rows else None,
+        "mean_jsd": mean_of("jsd"),
+        "mean_tvd": mean_of("tvd"),
+        "mean_shift": mean_of("mean_shift"),
+        "mean_fail_share_shift": mean_of("fail_share_shift"),
+        "chi_square_tested": len(tested),
+        # Descriptive count, uncorrected for testing many puzzles.
+        "chi_square_p_below_0_05": sum(1 for row in tested if row["chi_square_p"] < 0.05),
+        "mean_split_half_w1": mean_of("split_half_w1"),
+        "mean_split_half_random_w1": mean_of("split_half_random_mean"),
+    }
+
+
+# ---------------------------------------------------------------------------
 # Pooling
 # ---------------------------------------------------------------------------
 
@@ -551,13 +746,41 @@ def experiment_block(
     }
 
 
+@dataclass(frozen=True)
+class AnalysisResult:
+    metrics: dict[str, Any]
+    tables: dict[str, list[dict[str, Any]]]
+
+
 def analyse(
     experiments: Sequence[Experiment],
     cut_points: Sequence[float],
     seed: int = DEFAULT_SEED,
     resamples: int = BOOTSTRAP_RESAMPLES,
-) -> dict[str, Any]:
-    """Build the full metrics document."""
+) -> AnalysisResult:
+    """Build the metrics document and the per-puzzle and persona tables."""
+
+    blocks = {
+        e.name: experiment_block(e, cut_points, seed, resamples)
+        for e in experiments
+    }
+    distribution: list[dict[str, Any]] = []
+    personas: list[dict[str, Any]] = []
+    openers: list[dict[str, Any]] = []
+
+    for e in experiments:
+        if planned_repetitions(e.config) >= MIN_RUNS_FOR_DISTRIBUTION:
+            rows = distribution_rows(e, seed, resamples)
+            distribution.extend(rows)
+            blocks[e.name]["distribution"] = distribution_summary(rows)
+        else:
+            blocks[e.name]["distribution"] = None
+
+        games = load_games(e.directory / "runs")
+        stats = persona_statistics(games, seed, resamples)
+        blocks[e.name]["personas"] = stats
+        personas.extend(persona_rows(e.name, stats))
+        openers.extend(opener_rows(e.name, games))
 
     blockers = pooling_blockers(experiments)
     pooled = None
@@ -575,15 +798,12 @@ def analyse(
             ),
         }
 
-    return {
+    metrics = {
         "generated_at": datetime.now(UTC).isoformat(),
-        "analysis": "pilot-02 P12",
+        "analysis": "pilot-02 P12-P13",
         "cut_points": list(cut_points),
         "loss_score": LOSS_SCORE,
-        "experiments": {
-            e.name: experiment_block(e, cut_points, seed, resamples)
-            for e in experiments
-        },
+        "experiments": blocks,
         "pooled": pooled,
         "pooling_blockers": blockers,
         "notes": [
@@ -593,8 +813,51 @@ def analyse(
             "system mean by value with the frozen cut-points.",
             "CIs resample puzzles within human quartiles; runs are never "
             "treated as independent puzzles.",
+            "Distribution CIs resample runs within a puzzle; the human shares "
+            "are fixed reference values.",
+            "Persona statistics are descriptive; non-candidate shares leave "
+            "out turn 1. The Cautious minus Bold gap has a CI over games.",
         ],
     }
+    return AnalysisResult(
+        metrics=metrics,
+        tables={
+            "puzzle_summary": puzzle_rows(experiments, cut_points),
+            "distribution_summary": distribution,
+            "persona_stats": personas,
+            "openers": openers,
+        },
+    )
+
+
+def persona_rows(experiment: str, stats: dict[str, Any]) -> list[dict[str, Any]]:
+    """One GM row (retention) and one row per advisor (adoption, agreement)."""
+
+    rows = [
+        {
+            "experiment": experiment,
+            "agent": "gm",
+            "turns": stats["turns"],
+            "retained_or_adopted": stats["gm_retained"],
+            "rate": stats["gm_retention_rate"],
+        }
+    ]
+    for key, item in stats["advisors"].items():
+        rows.append(
+            {
+                "experiment": experiment,
+                "agent": key,
+                "turns": item["turns"],
+                "retained_or_adopted": item["adopted"],
+                "rate": item["adoption_rate"],
+                "agreed": item["agreed"],
+                "agreement_rate": item["agreement_rate"],
+                "suggestions_after_turn_1": item["suggestions_after_turn_1"],
+                "non_candidate": item["non_candidate"],
+                "non_candidate_share": item["non_candidate_share"],
+            }
+        )
+    return rows
 
 
 def puzzle_rows(
@@ -640,23 +903,31 @@ def puzzle_rows(
     return rows
 
 
-def write_outputs(
-    output_dir: Path,
-    metrics: dict[str, Any],
-    rows: Sequence[dict[str, Any]],
-) -> None:
+TABLE_COLUMNS = {
+    "puzzle_summary": PUZZLE_SUMMARY_COLUMNS,
+    "distribution_summary": DISTRIBUTION_COLUMNS,
+    "persona_stats": PERSONA_COLUMNS,
+    "openers": OPENER_COLUMNS,
+}
+
+
+def write_outputs(output_dir: Path, result: AnalysisResult) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     (output_dir / "metrics.json").write_text(
-        json.dumps(_round_output(metrics), indent=2) + "\n", encoding="utf-8"
+        json.dumps(_round_output(result.metrics), indent=2) + "\n", encoding="utf-8"
     )
-    with (output_dir / "puzzle_summary.csv").open("w", encoding="utf-8", newline="") as file:
-        fieldnames: list[str] = list(PUZZLE_SUMMARY_COLUMNS)
-        writer = csv.DictWriter(file, fieldnames=fieldnames)
-        writer.writeheader()
-        for row in rows:
-            writer.writerow(
-                {key: "" if value is None else _round_output(value) for key, value in row.items()}
-            )
+    for name, columns in TABLE_COLUMNS.items():
+        with (output_dir / f"{name}.csv").open("w", encoding="utf-8", newline="") as file:
+            fieldnames: list[str] = list(columns)
+            writer = csv.DictWriter(file, fieldnames=fieldnames)
+            writer.writeheader()
+            for row in result.tables[name]:
+                writer.writerow(
+                    {
+                        key: "" if row.get(key) is None else _round_output(row[key])
+                        for key in fieldnames
+                    }
+                )
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -684,8 +955,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         if directory is not None
     ]
     cut_points = load_cut_points(args.quartiles)
-    metrics = analyse(experiments, cut_points, args.seed, args.resamples)
-    write_outputs(args.output_dir, metrics, puzzle_rows(experiments, cut_points))
+    result = analyse(experiments, cut_points, args.seed, args.resamples)
+    write_outputs(args.output_dir, result)
+    metrics = result.metrics
 
     for name, block in metrics["experiments"].items():
         rq1, rq2 = block["rq1"], block["rq2"]
@@ -694,8 +966,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             f"mean within-SD {rq1['mean_within_sd']}, ICC(1,1) {rq1['icc_1_1']}, "
             f"MAE {rq2['mae']}, QWK {rq2['quadratic_weighted_kappa']}"
         )
+        if block["distribution"]:
+            print(f"  mean W1 {block['distribution']['mean_w1']}")
+        check = block["personas"]["manipulation_check"]
+        if check:
+            print(f"  cautious minus bold non-candidate share {check['point']} "
+                  f"[{check['ci_low']}, {check['ci_high']}]")
     print("pooled:" if metrics["pooled"] else "not pooled:", metrics["pooling_blockers"] or "ok")
-    print(f"Wrote {args.output_dir / 'metrics.json'} and puzzle_summary.csv")
+    print(f"Wrote metrics.json and {len(TABLE_COLUMNS)} CSV tables to {args.output_dir}")
     return 0
 
 
