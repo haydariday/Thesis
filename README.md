@@ -63,7 +63,7 @@ Key in ignored `.env` as `OPENCODE_API_KEY`, never in source or logs.
 ## Frozen configs
 
 - Pilot-01: `gpt-6-luna`, `responses`, temperature `null` (rejected by model), 20 puzzles x 3 reps. See `experiments/pilot-01/experiment_config.json`.
-- Pilot-02: `glm-5.3-flash`, `chat`, temperature `0.2` (record before runs; low favors RQ1, high favors distribution spread — decide with supervisor), personas `bold/cautious/casual`, `max_rounds=3`, `max_repairs=1`, timeout 300, retries 1. Exp A deep 12 x 32, Exp B wide 48 x 3, disjoint, seeds `20261013`/`20261014`.
+- Pilot-02: `deepseek-flash` (DeepSeek-V4.1-Flash) on the DeepSeek API, `chat`, thinking `disabled`, temperature `0.2` (decided at P0; favors RQ1 over distribution spread). The model ID is an alias that DeepSeek re-pointed once already (V4 → V4.1 on 2026-09-10), so check the per-call `system_fingerprint`, not only `model`. Personas `bold/cautious/casual`, `max_rounds=3`, `max_repairs=1`, timeout 300, retries 1. Exp A deep 12 x 32, Exp B wide 48 x 3, disjoint, seeds `20261013`/`20261014`.
 
 ## Pilot → final reuse rules
 
