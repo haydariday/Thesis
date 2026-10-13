@@ -111,6 +111,23 @@ class RunnerPersonaTest(unittest.TestCase):
             run_main("resume", "--experiment-dir", str(self.experiment))
         self.assertIn("new configuration", str(raised.exception.code))
 
+    def test_config_records_code_state(self):
+        self.start("--persona-preset", "pilot-02")
+
+        config = self.config()
+        self.assertIn(config["code_dirty"], (True, False, None))
+        self.assertEqual(len(config["source_sha256"]), 64)
+
+    def test_resume_refuses_changed_source_code(self):
+        self.start("--persona-preset", "pilot-02")
+
+        with (
+            mock.patch.object(runner, "source_hash", return_value="0" * 64),
+            self.assertRaises(SystemExit) as raised,
+        ):
+            run_main("resume", "--experiment-dir", str(self.experiment))
+        self.assertIn("source code changed", str(raised.exception.code))
+
     def test_start_rejects_bad_persona_flags(self):
         cases = [
             (),

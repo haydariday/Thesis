@@ -65,7 +65,7 @@ Keys in ignored `.env` as `DEEPSEEK_API_KEY` (`--backend deepseek`) or `OPENCODE
 ## Frozen configs
 
 - Pilot-01: `gpt-6-luna`, `responses`, temperature `null` (rejected by model), 20 puzzles x 3 reps. See `experiments/pilot-01/experiment_config.json`.
-- Pilot-02: `deepseek-flash` (DeepSeek-V4.1-Flash) on the DeepSeek API, `chat`, thinking `disabled`, temperature `0.2` (decided at P0; favors RQ1 over distribution spread). The model ID is an alias that DeepSeek re-pointed once already (V4 → V4.1 on 2026-09-10), so check the per-call `system_fingerprint`, not only `model`. `max_tokens=1024`, JSON mode, `known_letters` in the observation (P8). Personas `bold/cautious/casual`, `max_rounds=3`, `max_repairs=1`, timeout 300, retries 1. Exp A deep 12 x 32, Exp B wide 48 x 3, disjoint, seeds `20261013`/`20261014`.
+- Pilot-02 (frozen at tag `pilot-02-frozen`; full record and the P10/P11 commands in plan Section 6.1): `deepseek-flash` (DeepSeek-V4.1-Flash) on the DeepSeek API, `chat`, thinking `disabled`, temperature `0.2` (decided at P0; favors RQ1 over distribution spread). The model ID is an alias that DeepSeek re-pointed once already (V4 → V4.1 on 2026-09-10), so check the per-call `system_fingerprint`, not only `model`. `max_tokens=1024`, JSON mode, `known_letters` in the observation (P8). Personas `bold/cautious/casual`, `max_rounds=3`, `max_repairs=1`, timeout 300, retries 1. Exp A deep 12 x 32, Exp B wide 48 x 3, disjoint, seeds `20261013`/`20261014`.
 
 ## Pilot → final reuse rules
 

@@ -182,6 +182,54 @@ For the pilot, [Julious (2005)](https://onlinelibrary.wiley.com/doi/abs/10.1002/
 - **Unchanged from pilot-01:** `max_rounds=3`, non-streaming, `max_repairs=1`, `request_timeout=300`, `api_retries=1`, `max_attempts_per_unit=2`, and the vocabulary and dataset hashes.
 - **Cost estimate (measured at P8, temperature 0.2):** about 57 s, 61 calls, 57k prompt tokens (23k from cache) and 3k completion tokens per game, or about $0.007 at off-peak prices. The 528 games of Exp A and Exp B come to about 8.5 hours and $4 off-peak, or about $8 at peak prices.
 
+### 6.1 Frozen configuration (P9, tag `pilot-02-frozen`, 2026-10-13)
+
+Both experiments run from the commit tagged `pilot-02-frozen`. Each run's `experiment_config.json` records `code_revision`, `code_dirty` (must be `false`) and `source_sha256`. `resume` refuses if the source changed since `start`.
+
+| Item | Frozen value |
+|---|---|
+| Model | `deepseek-flash` (DeepSeek-V4.1-Flash), `https://api.deepseek.com`, key `DEEPSEEK_API_KEY` |
+| Fingerprint seen at P8 | `aeb56401ca74e127821c4f9126dcb669` (probe and every smoke call). A different value during the runs splits the configuration. |
+| Sampling | thinking `disabled`, temperature `0.2`, `max_tokens=1024`, JSON mode on |
+| Debate | preset `pilot-02` (`neutral_gm`; advisors `bold`, `cautious`, `casual`), `max_rounds=3`, `max_repairs=1` |
+| Requests | `request_timeout=300`, `api_retries=1`, `max_attempts_per_unit=2` |
+| Source | `source_sha256` `58104891a7aae6440c4b97518b2cbd01592ff33e6c54f44ba029c47aa8f8a595` |
+| Dataset | `worldepuzzles.json` `ed235aa79e1c13a684b7517dda08976967ce8ddb653943632d71b7dea2c41a27` |
+| Guess list | `allowed_guesses.txt` `9df5dad1b44cf1b9e0fa7c3ebff94d69ff7efb59f8691ac88e74e1c7b3da121e` |
+| Manifests | wide `b95b2899fc87eb3d340ce4260e2c407aa047213087c72bc3538ebb47172d7cc1`, deep `863971e383a8a9927726f5b4dfa66b0648860295ac08a62b046d7454d9ed01e5` |
+| Human data | `wordle_human_clean.csv` `3f15e93bf54eb238f5395075c80e711cbfd3842c7d2d6f4dd30274217a83b3a8`, `quartiles.json` `d91925d785922415cfcca528f5cd211ff5273b403c2832ade0ba20e95ed00a6d` |
+| Environment | Python 3.12.14, langgraph 1.2.13, openai 3.26.0, pydantic 2.13.5, `uv.lock` `6250936871fd77f3e0bef9eca42f6c6c32ea211da2f2d4164ab764637221f970` |
+
+**Run rules.** Run P10 and then P11 back to back from the tag, with a clean tree. Commit nothing until P11 has started, because pooling requires the same `code_revision` (README rule 1). Prefer off-peak hours (outside 01:00–04:00 and 06:00–10:00 UTC on weekdays). Results are committed only after both experiments finish.
+
+P10, Exp B (wide), 48 × 3 games, about 2.3 hours:
+
+```bash
+uv run python -m multi_agent_testing.experiment.runner start \
+  --experiment-dir experiments/pilot-02-wide \
+  --manifest experiments/manifests/pilot-02-wide.csv \
+  --dataset src/data/raw/worldepuzzles.json \
+  --guess-list src/data/raw/allowed_guesses.txt \
+  --backend deepseek --protocol chat --model deepseek-flash \
+  --base-url 'https://api.deepseek.com' \
+  --thinking disabled --temperature 0.2 --max-tokens 1024 --json-mode \
+  --max-rounds 3 --max-repairs 1 --request-timeout 300 --api-retries 1 \
+  --repetitions 3 --max-attempts 2 \
+  --persona-preset pilot-02 \
+  --max-seconds 3600
+```
+
+P11, Exp A (deep), 12 × 32 games, about 6 hours: the same command with `--experiment-dir experiments/pilot-02-deep`, `--manifest experiments/manifests/pilot-02-deep.csv` and `--repetitions 32`.
+
+Continue either experiment after a chunk or an interruption with:
+
+```bash
+uv run python -m multi_agent_testing.experiment.runner resume \
+  --experiment-dir experiments/pilot-02-wide --max-seconds 3600
+```
+
+Between P10 and P11, the checkpoint in Section 9 applies: run `analysis_pilot02 --wide experiments/pilot-02-wide --output-dir <a scratch folder>` and look at the fingerprints and the Cautious minus Bold gap before starting P11.
+
 ## 7. Analysis
 
 A new `experiment/analysis_pilot02.py` reads both experiment directories and writes CSV and JSON outputs. Like the current `analysis.py`, it uses only the standard library.

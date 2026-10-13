@@ -72,6 +72,33 @@ def code_revision() -> str | None:
     return result.stdout.strip() or None
 
 
+def code_dirty() -> bool | None:
+    """True when tracked code, data or dependency files differ from HEAD.
+
+    Untracked files are ignored, since experiment outputs land inside the
+    repository while a run is in progress.
+    """
+
+    try:
+        result = subprocess.run(
+            [
+                "git", "status", "--porcelain", "--untracked-files=no",
+                "--", "src", "pyproject.toml", "uv.lock",
+            ],
+            cwd=PROJECT_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return None
+
+    if result.returncode != 0:
+        return None
+
+    return bool(result.stdout.strip())
+
+
 def environment_info() -> dict:
     packages = {}
 
@@ -163,6 +190,7 @@ def build_config(args) -> dict:
         "primary_threshold": 4.0,
         "thresholds": [3.8, 4.0, 4.2],
         "code_revision": code_revision(),
+        "code_dirty": code_dirty(),
         "source_sha256": source_hash(),
         "environment": environment_info(),
     }
@@ -560,6 +588,14 @@ def run_resume(args) -> None:
                 f"{label} changed since the experiment was frozen; "
                 "start a new experiment instead."
             )
+
+    recorded_source = config.get("source_sha256")
+    if recorded_source is not None and source_hash() != recorded_source:
+        raise SystemExit(
+            "The source code changed since the experiment started "
+            "(source_sha256 differs). Check out the recorded code_revision "
+            f"({config.get('code_revision')}) or start a new experiment."
+        )
 
     try:
         lineup_from_config(config["settings"].get("personas"))
