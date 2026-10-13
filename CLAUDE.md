@@ -35,6 +35,7 @@ Type checking: pyright, `standard` mode, configured in `pyrightconfig.json` (`ex
 Other entry points (all `uv run python -m multi_agent_testing.…`):
 - `experiment.runner start|resume` — run a manifest of puzzles × repetitions into an experiment dir. `start` requires `--persona-preset` or `--advisors` (flags from `agent/persona_args.py`, shared with `debate_test`). Chunk long runs with `--max-seconds`, then `resume`. An existing dir must be resumed, not restarted. `resume` rebuilds personas from `settings.personas` and refuses if the registry text changed (`personas.lineup_from_config`).
 - `experiment.analysis --experiment-dir …` — pilot-01 metrics (stdlib only).
+- `experiment.analysis_pilot02 --deep … --wide … --output-dir …` — pilot-02 P12 metrics: RQ1 (within-puzzle SD, ICC(1,1)/ICC(1,k), exact-match) and RQ2 (MAE, correlations, D1–D4 confusion, quadratic-weighted kappa), with puzzle bootstrap CIs stratified by quartile. Pools deep and wide only if configs, code revision and fingerprints match. Reuses helpers from `analysis.py`.
 - `experiment.manifest` — puzzle eligibility audit (`audit_record`, shared by later modules) and pilot-01 sampling.
 - `experiment.manifest_pilot02` — pilot-02 deep/wide manifests, stratified by quartile (see README for the command).
 - `experiment.human_data` — rebuilds `src/data/processed/wordle_human_clean.csv` and `quartiles.json`.

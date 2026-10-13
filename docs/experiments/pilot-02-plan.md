@@ -204,6 +204,9 @@ For each puzzle, compare the system's 7-bin distribution (32 runs) with the huma
 
 ### RQ2 mean alignment and D1–D4 (Exp B, with Exp A as a check)
 
+No primary measure is named for these two levels in pilot-02; every measure below is reported with equal weight. P15 chooses the primaries for the final study from the pilot results (decided 2026-10-13). Candidates are Spearman for the mean level, with MAE and signed error as calibration, and quadratic-weighted kappa for D1–D4.
+
+
 - MAE, signed error, Spearman and Pearson between system and human means.
 - The system mean is mapped to D1–D4 using the frozen human cut-points, which gives a 4×4 confusion matrix.
 - Exact quartile accuracy, adjacent accuracy (within one quartile), quadratic-weighted Cohen's kappa and per-quartile recall.
@@ -275,7 +278,7 @@ The data track and the persona track are independent, so they can be done in eit
 | **P12** Analysis: RQ1, mean, quartile | Core metrics | Add `analysis_pilot02.py`, reusing the `analysis.py` helpers: within-puzzle SD, ICC(1,1) and ICC(1,k), MAE, signed error, Spearman, Pearson, the 4×4 confusion matrix, quadratic-weighted kappa and bootstrap CIs. | Tests on synthetic runs reproduce known values, and the module produces `metrics.json` and `puzzle_summary.csv`. | offline | M |
 | **P13** Analysis: distribution and persona | Supervisor's comparison and persona statistics | W1, JSD, TVD and chi-square for each puzzle, bootstrap CIs over runs and the split-half W1. Also GM retention and advisor adoption, agreement and non-candidate shares. | Hand-checked synthetic cases pass, and the module writes `distribution_summary.csv` and `persona_stats.csv`. | offline | M |
 | **P14** Figures F2–F9 | Visualize every result | Add F2–F9 to `plots.py`, reading only the analysis outputs. Re-plot pilot-01 with F2, F5, F6 and F7 for comparison. | All figures exist as PDF and PNG at IEEE widths and pass a visual check for clipping, overlap and contrast. | offline | M |
-| **P15** Findings and final sizing | Close pilot-02 | Write a pilot-02 findings section in the roadmap. Use the observed variance to size the final study (runs per puzzle and puzzles per quartile) and to choose the RQ1 equivalence margin. | The roadmap is updated, and the final-study sizes and the RQ1 margin are recorded before any final run. | offline | S |
+| **P15** Findings and final sizing | Close pilot-02 | Write a pilot-02 findings section in the roadmap. Use the observed variance to size the final study (runs per puzzle and puzzles per quartile) and to choose the RQ1 equivalence margin and the RQ2 primary measures for the mean and D1–D4 levels. | The roadmap is updated, and the final-study sizes, the RQ1 margin and the RQ2 primaries are recorded before any final run. | offline | S |
 
 ### Checkpoints
 
