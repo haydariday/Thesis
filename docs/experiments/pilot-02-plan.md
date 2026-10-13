@@ -13,7 +13,7 @@ Pilot-02 replaces the Negative/Positive advisors with playstyle personas. It als
 | Supervisor's 7-bin advice | Compare the system's guess-count distribution with the human distribution for each puzzle (bins 1–6 plus 7 = fail). |
 | D1–D4 test | "Play, then map": the system plays the puzzle, and its mean score is placed into a quartile using the human cut-points. The model never rates difficulty directly. |
 | Human data | Standard mode only. The `hardmode` block is not used. |
-| Model | A new model that accepts `temperature`, served by OpenCode Zen through the chat-completions protocol. |
+| Model | `glm-5.3-flash` on OpenCode Zen through the chat-completions protocol (`temperature`-capable). |
 | Distribution pilot size | 32 runs × 12 puzzles, which gives the Thompson ±20% precision level (see Section 5). |
 
 ## 2. Personas (modular)
@@ -161,7 +161,7 @@ For the pilot, [Julious (2005)](https://onlinelibrary.wiley.com/doi/abs/10.1002/
 
 ## 6. Model and frozen configuration
 
-- **Model:** a temperature-capable chat-completions model on OpenCode Zen. The current candidate is `deepseek-v4-flash` ($0.14 input / $0.28 output per 1M tokens, chat completions), according to the [OpenCode Zen model list](https://opencode.ai/docs/zen/). A one-call probe must confirm that it accepts `temperature` and returns usage before any runs. If it fails, the probe moves to the next cheap chat model on the list.
+- **Model:** `glm-5.3-flash` ($0.15 input / $0.50 output per 1M tokens, `https://opencode.ai/zen/v1/chat/completions`), according to the [OpenCode Zen model list](https://opencode.ai/docs/zen/). A one-call probe must confirm that it accepts `temperature` and returns usage before any runs. If it fails, the probe moves to the next cheap chat model on the list (`deepseek-v4-flash`).
 - **Temperature (decision needed):** a low temperature (0.2, as in pilot-01) favors RQ1 consistency but narrows the system's distribution, which makes the RQ2 distribution comparison almost meaningless. A higher value (for example 1.0) treats each run as one simulated player. This choice must be made and recorded before the runs, ideally with the supervisor.
 - **Unchanged from pilot-01:** `max_rounds=3`, non-streaming, `max_repairs=1`, `request_timeout=300`, `api_retries=1`, `max_attempts_per_unit=2`, and the vocabulary and dataset hashes.
 - **Cost estimate:** with three advisors a turn has five calls instead of four, so about 119 s and 18k tokens per game. Exp A and Exp B together come to about 528 games, 17–18 hours and 9.5M tokens. The real speed depends on the chosen model.
