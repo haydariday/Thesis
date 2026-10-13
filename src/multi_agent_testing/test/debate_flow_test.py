@@ -407,5 +407,138 @@ class DebateFlowTests(unittest.TestCase):
         self.assertNotIn("CIGAR", bridge.observe())
 
 
+
+class TurnStatisticsTests(unittest.TestCase):
+    """Per-turn GM and persona statistics (pilot-02 plan, Section 2.3)."""
+
+    # RAISE against CIGAR scores YYYBB, which leaves CIGAR and VIRAL.
+    VOCABULARY = {"CIGAR", "CRANE", "RAISE", "SLATE", "VIRAL"}
+
+    def play(self, backend, *, max_rounds: int = 1, max_attempts: int = 1) -> RunLog:
+        game = WordleGame(
+            WordlePuzzle("0", "CIGAR"),
+            allowed_guesses=self.VOCABULARY,
+            max_attempts=max_attempts,
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            return play_wordle_game(
+                game=game,
+                bridge=WordleBridge(game),
+                lineup=create_lineup(backend, preset="pilot-02"),
+                run=RunLog(metadata={}, path=Path(directory) / "run.json"),
+                max_rounds=max_rounds,
+                max_repairs=1,
+                raise_errors=False,
+            )
+
+    @staticmethod
+    def turn_backend(gm: str, bold: str, cautious: str, casual: str, review: str):
+        return [
+            completion(gm, False),
+            completion(bold, False),
+            completion(cautious, False),
+            completion(casual, False),
+            completion(review, True),
+        ]
+
+    def test_gm_retains_its_proposal(self):
+        run = self.play(SequenceBackend(self.turn_backend("RAISE", "SLATE", "CRANE", "RAISE", "RAISE")))
+        turn = run.data["turns"][0]
+
+        self.assertEqual(turn["initial_proposal"], "RAISE")
+        self.assertTrue(turn["gm_retained"])
+        self.assertEqual(turn["adopted_from"], [])
+        self.assertEqual(
+            turn["advisor_agreed"],
+            {"bold": False, "cautious": False, "casual": True},
+        )
+        self.assertEqual(
+            [(s["round"], s["advisor"], s["action"], s["gm_proposal"]) for s in turn["advisor_suggestions"]],
+            [(1, "bold", "SLATE", "RAISE"), (1, "cautious", "CRANE", "RAISE"), (1, "casual", "RAISE", "RAISE")],
+        )
+        # No feedback yet: every word could be the answer.
+        self.assertEqual(turn["candidates_remaining"], 5)
+        self.assertEqual(turn["is_candidate"], {"initial_proposal": True, "final_action": True})
+
+    def test_gm_adopts_advisor_words(self):
+        run = self.play(SequenceBackend(self.turn_backend("RAISE", "SLATE", "CRANE", "CRANE", "CRANE")))
+        turn = run.data["turns"][0]
+
+        self.assertEqual(turn["final_action"], "CRANE")
+        self.assertFalse(turn["gm_retained"])
+        self.assertEqual(turn["adopted_from"], ["cautious", "casual"])
+
+    def test_gm_switches_to_a_word_no_advisor_offered(self):
+        run = self.play(SequenceBackend(self.turn_backend("RAISE", "SLATE", "SLATE", "SLATE", "CRANE")))
+        turn = run.data["turns"][0]
+
+        self.assertFalse(turn["gm_retained"])
+        self.assertEqual(turn["adopted_from"], [])
+
+    def test_agreement_is_judged_against_each_round_proposal(self):
+        backend = SequenceBackend(
+            [
+                completion("RAISE", False),
+                completion("SLATE", False),
+                completion("RAISE", False),  # cautious agrees in round 1
+                completion("RAISE", False),  # casual agrees in round 1
+                completion("SLATE", False),  # review 1: switch to SLATE, continue
+                completion("SLATE", False),  # bold now agrees
+                completion("RAISE", False),  # cautious now disagrees
+                completion("SLATE", False),  # casual agrees again
+                completion("SLATE", True),
+            ]
+        )
+        turn = self.play(backend, max_rounds=2).data["turns"][0]
+
+        self.assertEqual(turn["debate_rounds"], 2)
+        self.assertEqual(
+            [s["gm_proposal"] for s in turn["advisor_suggestions"]],
+            ["RAISE"] * 3 + ["SLATE"] * 3,
+        )
+        self.assertEqual(
+            [s["agreed"] for s in turn["advisor_suggestions"]],
+            [False, True, True, True, False, True],
+        )
+        self.assertEqual(
+            turn["advisor_agreed"],
+            {"bold": False, "cautious": False, "casual": True},
+        )
+        self.assertEqual(turn["adopted_from"], ["bold", "casual"])
+
+    def test_candidates_follow_public_feedback(self):
+        backend = SequenceBackend(
+            self.turn_backend("RAISE", "RAISE", "RAISE", "RAISE", "RAISE")
+            + self.turn_backend("VIRAL", "CIGAR", "SLATE", "CRANE", "CIGAR")
+        )
+        run = self.play(backend, max_attempts=2)
+        second = run.data["turns"][1]
+
+        self.assertTrue(run.data["outcome"]["won"])
+        self.assertEqual(run.data["turns"][0]["feedback"], "YYYBB")
+        self.assertEqual(second["candidates_remaining"], 2)
+        self.assertEqual(
+            {s["advisor"]: s["is_candidate"] for s in second["advisor_suggestions"]},
+            {"bold": True, "cautious": False, "casual": False},
+        )
+        self.assertEqual(second["is_candidate"], {"initial_proposal": True, "final_action": True})
+        self.assertEqual(second["adopted_from"], ["bold"])
+
+    def test_answer_never_appears_in_any_prompt(self):
+        backend = RecordingSequenceBackend(
+            self.turn_backend("RAISE", "SLATE", "CRANE", "VIRAL", "RAISE")
+            + self.turn_backend("VIRAL", "SLATE", "CRANE", "VIRAL", "VIRAL")
+        )
+        run = self.play(backend, max_attempts=2)
+
+        self.assertEqual(run.data["outcome"]["won"], False)
+        self.assertEqual(len(backend.calls), 10)
+        # The second turn's prompts carry real feedback, so the check is not vacuous.
+        self.assertIn("YYYBB", json.dumps(backend.calls[5][1]))
+        for system, payload in backend.calls:
+            prompt = (system + json.dumps(payload)).upper()
+            self.assertNotIn("CIGAR", prompt)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -71,6 +71,12 @@ class WordleGame:
             )
 
     @property
+    def vocabulary(self) -> frozenset[str] | None:
+        """The allowed guesses, or None when any five letters are accepted."""
+
+        return frozenset(self._allowed) if self._allowed is not None else None
+
+    @property
     def won(self) -> bool:
         return bool(
             self._history

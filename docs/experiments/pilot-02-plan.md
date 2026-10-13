@@ -63,11 +63,11 @@ These fields are logged in every turn record. They feed the persona statistics n
 | `initial_proposal` | The GM's first proposal in the turn. |
 | `final_action` | The executed guess. |
 | `gm_retained` | `final_action == initial_proposal`. |
-| `advisor_suggestions` | Each advisor's suggestion and round. |
-| `adopted_from` | The advisors whose suggestion equals the final action when it differs from the initial proposal. |
-| `advisor_agreed` | Whether each advisor returned the GM's proposal unchanged. |
-| `is_candidate` | For each suggestion and the final action, whether the word is still consistent with all public feedback, meaning it could still be the answer. This is computed from public history only. |
-| `candidates_remaining` | The number of vocabulary words still consistent with the feedback before the turn. |
+| `advisor_suggestions` | Each advisor's suggestion with its round, the GM proposal it answered, `agreed` and `is_candidate`. |
+| `adopted_from` | The advisors whose suggestion (in any round) equals the final action when it differs from the initial proposal. Empty when the GM keeps its word or picks a word no advisor offered. |
+| `advisor_agreed` | Whether each advisor returned the GM's current proposal unchanged. Over several rounds it is true only if the advisor agreed in every round. |
+| `is_candidate` | For each suggestion, the initial proposal and the final action, whether the word is still consistent with all public feedback, meaning it could still be the answer. This is computed from public history only. |
+| `candidates_remaining` | The number of words in the allowed-guess vocabulary (14,855) still consistent with the feedback before the turn. |
 
 Aggregated per experiment, these give:
 

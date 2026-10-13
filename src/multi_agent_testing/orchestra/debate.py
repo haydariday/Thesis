@@ -209,6 +209,7 @@ def create_debate_graph(
 
         return {
             "proposal": decision.action,
+            "initial_proposal": decision.action,
             "transcript": state["transcript"] + [
                 f"GM proposes {decision.action}: {decision.reason}"
             ],
@@ -230,6 +231,14 @@ def create_debate_graph(
                         "reason": decision.reason,
                     },
                 },
+                "suggestion_log": state["suggestion_log"] + [
+                    {
+                        "round": state["round"] + 1,
+                        "advisor": spec.key,
+                        "action": decision.action,
+                        "gm_proposal": state["proposal"],
+                    }
+                ],
                 "transcript": state["transcript"] + [
                     f"{agent.name} {verb} {decision.action}: {decision.reason}"
                 ],

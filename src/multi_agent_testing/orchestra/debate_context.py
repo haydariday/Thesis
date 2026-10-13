@@ -14,11 +14,24 @@ class Suggestion(TypedDict):
     reason: str
 
 
+class LoggedSuggestion(TypedDict):
+    """One advisor suggestion kept for turn statistics, never sent to agents."""
+
+    round: int
+    advisor: str
+    action: str
+    # The GM proposal the advisor was answering.
+    gm_proposal: str
+
+
 class DebateState(TypedDict):
     context: str
     proposal: str
+    initial_proposal: str
     # Current round only, keyed by advisor persona key in speaking order.
     suggestions: dict[str, Suggestion]
+    # Every round's suggestions, in speaking order.
+    suggestion_log: list[LoggedSuggestion]
     transcript: list[str]
     final_action: str
     round: int
@@ -33,7 +46,9 @@ def new_debate_state(context: str, max_rounds: int) -> DebateState:
     return {
         "context": context,
         "proposal": "",
+        "initial_proposal": "",
         "suggestions": {},
+        "suggestion_log": [],
         "transcript": [],
         "final_action": "",
         "round": 0,

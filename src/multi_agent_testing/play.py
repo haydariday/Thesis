@@ -1,14 +1,75 @@
 """Single-game Wordle playthrough shared by the CLI and the experiment runner."""
 
 import time
+from collections.abc import Mapping, Sequence
+from typing import Any
 
 from .agent.personas import Lineup
 from .games.wordle.bridge import WordleBridge
+from .games.wordle.candidates import filter_candidates, is_consistent
 from .games.wordle.engine import WordleGame
 from .orchestra.debate import create_debate_graph
 from .orchestra.debate_context import new_debate_state
 from .orchestra.flow.sequential import recursion_limit
 from .run_log import CallRecorder, RunLog
+
+
+def turn_statistics(
+    result: Mapping[str, Any],
+    final_action: str,
+    advisor_keys: Sequence[str],
+    history: Sequence[Mapping[str, str]],
+    candidates: set[str] | None,
+) -> dict[str, Any]:
+    """GM and persona statistics for one turn (pilot-02 plan, Section 2.3).
+
+    ``history`` is the public feedback before the turn. ``candidates`` is the
+    vocabulary filtered by that history, or None without a vocabulary.
+    """
+
+    initial = result["initial_proposal"]
+    log = result["suggestion_log"]
+
+    suggestions = [
+        {
+            **entry,
+            "agreed": entry["action"] == entry["gm_proposal"],
+            "is_candidate": is_consistent(entry["action"], history),
+        }
+        for entry in log
+    ]
+
+    return {
+        "initial_proposal": initial,
+        "gm_retained": final_action == initial,
+        "advisor_suggestions": suggestions,
+        # Advisors whose word the GM switched to; empty if the GM kept its own.
+        "adopted_from": [
+            key
+            for key in advisor_keys
+            if final_action != initial
+            and any(
+                entry["advisor"] == key and entry["action"] == final_action
+                for entry in log
+            )
+        ],
+        # True when the advisor returned the GM's proposal in every round.
+        "advisor_agreed": {
+            key: all(
+                entry["agreed"]
+                for entry in suggestions
+                if entry["advisor"] == key
+            )
+            for key in advisor_keys
+        },
+        "is_candidate": {
+            "initial_proposal": is_consistent(initial, history),
+            "final_action": is_consistent(final_action, history),
+        },
+        "candidates_remaining": (
+            len(candidates) if candidates is not None else None
+        ),
+    }
 
 
 def play_wordle_game(
@@ -27,6 +88,11 @@ def play_wordle_game(
 
     recorder = CallRecorder()
     started = time.perf_counter()
+    advisor_keys = [agent.persona.key for agent in lineup.advisors]
+    # Narrowed by public feedback each turn; the answer is never consulted.
+    candidates = (
+        set(game.vocabulary) if game.vocabulary is not None else None
+    )
 
     def sync_metrics() -> None:
         run.data["calls"] = recorder.as_dicts()
@@ -45,6 +111,10 @@ def play_wordle_game(
         while not game.done:
             observation = game.observation()
             turn = len(observation["history"]) + 1
+            if candidates is not None:
+                candidates = filter_candidates(
+                    candidates, observation["history"]
+                )
             turn_started = time.perf_counter()
 
             if echo:
@@ -71,6 +141,13 @@ def play_wordle_game(
                     "observation_before": observation,
                     "final_action": guess_result.guess,
                     "feedback": guess_result.feedback,
+                    **turn_statistics(
+                        result,
+                        guess_result.guess,
+                        advisor_keys,
+                        observation["history"],
+                        candidates,
+                    ),
                     "debate_rounds": result["round"],
                     "gm_requested_stop": result["stop"],
                     "round_cap_reached": (
