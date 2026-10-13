@@ -25,7 +25,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from ..agent.backend import ChatCompletionsBackend, ResponsesBackend
-from ..agent.personas import create_agents
+from ..agent.personas import create_lineup
 from ..games.wordle.bridge import WordleBridge
 from ..games.wordle.dataset import (
     WordlePuzzle,
@@ -355,7 +355,7 @@ def execute_plan(
                 allowed_guesses=allowed_guesses,
             )
             bridge = WordleBridge(game)
-            agents = create_agents(backend=backend)
+            lineup = create_lineup(backend, preset="pilot-01")
 
             metadata = {
                 "experiment_id": config["experiment_id"],
@@ -377,10 +377,7 @@ def execute_plan(
                 "guess_list_sha256": config["guess_list_sha256"],
                 "repetition": repetition,
                 "attempt": attempt,
-                "agent_instructions": {
-                    role.value: agent.instruction
-                    for role, agent in agents.items()
-                },
+                "agent_instructions": lineup.instructions(),
             }
 
             run = RunLog(metadata=metadata, path=run_path)
@@ -389,7 +386,7 @@ def execute_plan(
             play_wordle_game(
                 game=game,
                 bridge=bridge,
-                agents=agents,
+                lineup=lineup,
                 run=run,
                 max_rounds=settings["max_rounds"],
                 max_repairs=settings["max_repairs"],

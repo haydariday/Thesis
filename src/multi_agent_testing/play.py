@@ -2,12 +2,12 @@
 
 import time
 
-from .agent.agent import Agent
-from .agent.agent_role import AgentRole
+from .agent.personas import Lineup
 from .games.wordle.bridge import WordleBridge
 from .games.wordle.engine import WordleGame
 from .orchestra.debate import create_debate_graph
-from .orchestra.debate_context import DebateState
+from .orchestra.debate_context import new_debate_state
+from .orchestra.flow.sequential import recursion_limit
 from .run_log import CallRecorder, RunLog
 
 
@@ -15,7 +15,7 @@ def play_wordle_game(
     *,
     game: WordleGame,
     bridge: WordleBridge,
-    agents: dict[AgentRole, Agent],
+    lineup: Lineup,
     run: RunLog,
     max_rounds: int,
     max_repairs: int,
@@ -35,7 +35,7 @@ def play_wordle_game(
 
     try:
         graph = create_debate_graph(
-            agents,
+            lineup,
             stream=stream,
             validate_action=bridge.validate_action,
             max_repairs=max_repairs,
@@ -51,21 +51,12 @@ def play_wordle_game(
                 print(f"\n{'=' * 40}")
                 print(f"Wordle turn {turn}")
 
-            initial_state: DebateState = {
-                "context": bridge.observe(),
-                "proposal": "",
-                "alternative": "",
-                "transcript": [],
-                "final_action": "",
-                "round": 0,
-                "max_rounds": max_rounds,
-                "stop": False,
-            }
-
             result = graph.invoke(
-                initial_state,
+                new_debate_state(bridge.observe(), max_rounds),
                 {
-                    "recursion_limit": max_rounds * 3 + 5,
+                    "recursion_limit": recursion_limit(
+                        max_rounds, len(lineup.advisors)
+                    ),
                 },
             )
 

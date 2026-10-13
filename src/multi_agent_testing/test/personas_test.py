@@ -5,8 +5,9 @@ from pathlib import Path
 from ..agent.agent_role import AgentRole
 from ..agent.backend import Completion
 from ..agent.persona_spec import ActionRule, PersonaSpec, Slot
-from ..agent.personas import PERSONAS, PRESETS, create_agents, create_lineup
+from ..agent.personas import PERSONAS, PRESETS, create_lineup
 from ..orchestra.debate import create_debate_graph
+from ..orchestra.debate_context import new_debate_state
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 PILOT_01_RUN = REPO_ROOT / "experiments" / "pilot-01" / "runs" / "puzzle-234-rep1-attempt1.json"
@@ -92,11 +93,14 @@ class LineupTest(unittest.TestCase):
 
 
 class Pilot01CompatibilityTest(unittest.TestCase):
-    def test_create_agents_keeps_roles_names_and_order(self):
-        agents = create_agents()
-        self.assertEqual(list(agents), [AgentRole.GM, AgentRole.NEGATIVE, AgentRole.POSITIVE])
+    def test_lineup_keeps_roles_names_and_order(self):
+        lineup = create_lineup(preset="pilot-01")
         self.assertEqual(
-            [agent.name for agent in agents.values()],
+            [agent.role for agent in lineup.agents],
+            [AgentRole.GM, AgentRole.NEGATIVE, AgentRole.POSITIVE],
+        )
+        self.assertEqual(
+            [agent.name for agent in lineup.agents],
             ["Game Master", "Negative Advisor", "Positive Advisor"],
         )
 
@@ -104,31 +108,28 @@ class Pilot01CompatibilityTest(unittest.TestCase):
     def test_instructions_match_recorded_pilot_01_run(self):
         recorded = json.loads(PILOT_01_RUN.read_text(encoding="utf-8"))
         expected = recorded["metadata"]["agent_instructions"]
-        actual = {role.value: agent.instruction for role, agent in create_agents().items()}
-        self.assertEqual(actual, expected)
+        self.assertEqual(create_lineup(preset="pilot-01").instructions(), expected)
 
-    def test_advisor_tasks_match_what_the_debate_sends(self):
-        backend = TaskRecordingBackend()
-        agents = create_agents(backend=backend)
-        graph = create_debate_graph(agents)
-        graph.invoke({
-            "context": "start",
-            "proposal": "",
-            "alternative": "",
-            "transcript": [],
-            "final_action": "",
-            "round": 0,
-            "max_rounds": 1,
-            "stop": False,
-        })
-        sent = {
-            role: task
-            for system, task in backend.tasks
-            for role in (AgentRole.NEGATIVE, AgentRole.POSITIVE)
-            if system.startswith(agents[role].instruction)
-        }
-        self.assertEqual(sent[AgentRole.NEGATIVE], PERSONAS["negative"].task)
-        self.assertEqual(sent[AgentRole.POSITIVE], PERSONAS["positive"].task)
+
+class AdvisorTaskTest(unittest.TestCase):
+    def test_each_advisor_receives_its_registry_task(self):
+        for preset in PRESETS:
+            with self.subTest(preset=preset):
+                backend = TaskRecordingBackend()
+                lineup = create_lineup(backend, preset=preset)
+                create_debate_graph(lineup).invoke(new_debate_state("start", max_rounds=1))
+                sent = {
+                    agent.persona.key: task
+                    for system, task in backend.tasks
+                    for agent in lineup.advisors
+                    if agent.persona and system.startswith(agent.instruction)
+                }
+                expected = {
+                    agent.persona.key: agent.persona.task
+                    for agent in lineup.advisors
+                    if agent.persona
+                }
+                self.assertEqual(sent, expected)
 
 
 if __name__ == "__main__":

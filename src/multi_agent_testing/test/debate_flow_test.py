@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 
 from ..agent.backend import Completion, ScriptedBackend
-from ..agent.personas import create_agents
+from ..agent.personas import create_lineup
 from ..games.wordle.bridge import WordleBridge
 from ..games.wordle.dataset import WordlePuzzle
 from ..games.wordle.engine import WordleGame
@@ -42,6 +42,20 @@ class SequenceBackend:
 
     def stream(self, messages):
         yield self.complete(messages).text
+
+
+class RecordingSequenceBackend(SequenceBackend):
+    """SequenceBackend that also keeps each call's system prompt and payload."""
+
+    def __init__(self, items):
+        super().__init__(items)
+        self.calls: list[tuple[str, dict]] = []
+
+    def complete(self, messages):
+        self.calls.append(
+            (str(messages[0]["content"]), json.loads(str(messages[1]["content"])))
+        )
+        return super().complete(messages)
 
 
 class FailingBackend:
@@ -91,7 +105,7 @@ class DebateFlowTests(unittest.TestCase):
             run = play_wordle_game(
                 game=game,
                 bridge=WordleBridge(game),
-                agents=create_agents(backend=backend),
+                lineup=create_lineup(backend, preset="pilot-01"),
                 run=self.make_run(directory),
                 max_rounds=1,
                 max_repairs=1,
@@ -129,7 +143,7 @@ class DebateFlowTests(unittest.TestCase):
             run = play_wordle_game(
                 game=game,
                 bridge=WordleBridge(game),
-                agents=create_agents(backend=backend),
+                lineup=create_lineup(backend, preset="pilot-01"),
                 run=self.make_run(directory),
                 max_rounds=1,
                 max_repairs=1,
@@ -163,7 +177,7 @@ class DebateFlowTests(unittest.TestCase):
             run = play_wordle_game(
                 game=game,
                 bridge=WordleBridge(game),
-                agents=create_agents(backend=FailingBackend()),
+                lineup=create_lineup(FailingBackend(), preset="pilot-01"),
                 run=self.make_run(directory),
                 max_rounds=1,
                 max_repairs=1,
@@ -186,7 +200,7 @@ class DebateFlowTests(unittest.TestCase):
                 play_wordle_game(
                     game=game,
                     bridge=WordleBridge(game),
-                    agents=create_agents(backend=FailingBackend()),
+                    lineup=create_lineup(FailingBackend(), preset="pilot-01"),
                     run=self.make_run(directory),
                     max_rounds=1,
                     max_repairs=1,
@@ -226,7 +240,7 @@ class DebateFlowTests(unittest.TestCase):
             run = play_wordle_game(
                 game=game,
                 bridge=WordleBridge(game),
-                agents=create_agents(backend=backend),
+                lineup=create_lineup(backend, preset="pilot-01"),
                 run=self.make_run(directory),
                 max_rounds=3,
                 max_repairs=1,
@@ -240,6 +254,119 @@ class DebateFlowTests(unittest.TestCase):
         self.assertEqual(turn["gm_requested_stop"], True)
         self.assertEqual(turn["termination"], "gm_stop")
         self.assertEqual(run.data["counters"]["agent_calls"], 10)
+
+    def make_pilot_02_game(self) -> WordleGame:
+        return WordleGame(
+            WordlePuzzle("0", "CIGAR"),
+            allowed_guesses={"CIGAR", "CRANE", "RAISE", "SLATE"},
+            max_attempts=1,
+        )
+
+    def play(self, backend, preset: str, game: WordleGame, max_rounds: int) -> RunLog:
+        with tempfile.TemporaryDirectory() as directory:
+            return play_wordle_game(
+                game=game,
+                bridge=WordleBridge(game),
+                lineup=create_lineup(backend, preset=preset),
+                run=self.make_run(directory),
+                max_rounds=max_rounds,
+                max_repairs=1,
+                raise_errors=False,
+            )
+
+    def test_pilot_01_action_rules_reject_and_repair(self):
+        backend = SequenceBackend(
+            [
+                completion("RAISE", False),
+                completion("RAISE", False),  # Negative repeats: rejected
+                completion("SLATE", False),
+                completion("SLATE", False),  # Positive deviates: rejected
+                completion("RAISE", False),
+                completion("RAISE", True),
+            ]
+        )
+        run = self.play(backend, "pilot-01", self.make_game(), max_rounds=1)
+
+        self.assertEqual(run.data["status"], "completed")
+        self.assertEqual(
+            run.data["counters"],
+            {"agent_calls": 6, "rejected_responses": 2, "backend_errors": 0},
+        )
+        self.assertEqual(
+            [call["role"] for call in run.data["calls"]],
+            ["gm", "negative", "negative", "positive", "positive", "gm"],
+        )
+
+    def test_pilot_02_runs_three_advisors_in_order(self):
+        backend = SequenceBackend(
+            [
+                completion("RAISE", False),
+                completion("SLATE", False),
+                completion("CRANE", False),
+                completion("RAISE", False),  # Casual agrees: allowed
+                completion("CRANE", True),
+            ]
+        )
+        run = self.play(backend, "pilot-02", self.make_pilot_02_game(), max_rounds=1)
+
+        self.assertEqual(run.data["status"], "completed")
+        self.assertEqual(
+            run.data["counters"],
+            {"agent_calls": 5, "rejected_responses": 0, "backend_errors": 0},
+        )
+        self.assertEqual(
+            [call["role"] for call in run.data["calls"]],
+            ["gm", "bold", "cautious", "casual", "gm"],
+        )
+        turn = run.data["turns"][0]
+        self.assertEqual(turn["final_action"], "CRANE")
+        self.assertEqual(turn["termination"], "gm_stop")
+        self.assertEqual(
+            [line.split(":")[0] for line in turn["transcript"]],
+            [
+                "GM proposes RAISE",
+                "Bold Advisor suggests SLATE",
+                "Cautious Advisor suggests CRANE",
+                "Casual Advisor suggests RAISE",
+                "GM reviews and selects CRANE",
+            ],
+        )
+
+    def test_pilot_02_suggestions_reach_review_and_reset_each_round(self):
+        backend = RecordingSequenceBackend(
+            [
+                completion("RAISE", False),
+                completion("SLATE", False),
+                completion("CRANE", False),
+                completion("RAISE", False),
+                completion("RAISE", False),  # review 1: continue
+                completion("SLATE", False),
+                completion("CRANE", False),
+                completion("RAISE", False),
+                completion("SLATE", True),  # review 2: stop
+            ]
+        )
+        run = self.play(backend, "pilot-02", self.make_pilot_02_game(), max_rounds=3)
+
+        self.assertEqual(run.data["turns"][0]["debate_rounds"], 2)
+        payloads = [payload for _, payload in backend.calls]
+        review_1 = payloads[4]["suggestions"]
+        self.assertEqual(list(review_1), ["bold", "cautious", "casual"])
+        self.assertEqual(
+            {key: value["action"] for key, value in review_1.items()},
+            {"bold": "SLATE", "cautious": "CRANE", "casual": "RAISE"},
+        )
+        self.assertEqual(payloads[2]["suggestions"], {"bold": {"action": "SLATE", "reason": "test reason"}})
+        self.assertEqual(payloads[5]["suggestions"], {})  # round 2, first advisor
+        self.assertEqual(run.data["turns"][0]["final_action"], "SLATE")
+
+    def test_pilot_02_reaches_round_cap_without_recursion_error(self):
+        backend = ScriptedBackend(response=decision_json("RAISE", False))
+        run = self.play(backend, "pilot-02", self.make_pilot_02_game(), max_rounds=3)
+
+        self.assertEqual(run.data["status"], "completed")
+        self.assertEqual(run.data["counters"]["agent_calls"], 1 + 3 * 4)
+        self.assertEqual(run.data["turns"][0]["termination"], "max_rounds")
 
     def test_usage_summary_stays_unknown_when_incomplete(self):
         recorder = CallRecorder()

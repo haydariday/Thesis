@@ -7,19 +7,19 @@ from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 
-from ..agent.agent_role import AgentRole
 from ..agent.backend import (
     ChatCompletionsBackend,
     ModelBackend,
     ResponsesBackend,
     ScriptedBackend,
 )
-from ..agent.personas import create_agents
+from ..agent.personas import create_lineup
 from ..games.wordle.bridge import WordleBridge
 from ..games.wordle.dataset import load_allowed_guesses, load_puzzle
 from ..games.wordle.engine import WordleGame
 from ..orchestra.debate import create_debate_graph
-from ..orchestra.debate_context import DebateState
+from ..orchestra.debate_context import new_debate_state
+from ..orchestra.flow.sequential import recursion_limit
 from ..play import play_wordle_game
 from ..run_log import RunLog
 
@@ -242,7 +242,7 @@ def main() -> None:
             f"Backend: {args.backend} | model: {args.model}"
         )
 
-    agents = create_agents(backend=backend)
+    lineup = create_lineup(backend, preset="pilot-01")
     if args.play:
         puzzle = load_puzzle(
             path=args.dataset,
@@ -282,10 +282,7 @@ def main() -> None:
                 "guess_list_sha256": hashlib.sha256(
                     args.guess_list.read_bytes()
                 ).hexdigest(),
-                "agent_instructions": {
-                    role.value: agent.instruction
-                    for role, agent in agents.items()
-                },
+                "agent_instructions": lineup.instructions(),
             },
             path=args.output,
         )
@@ -293,7 +290,7 @@ def main() -> None:
         play_wordle_game(
             game=game,
             bridge=bridge,
-            agents=agents,
+            lineup=lineup,
             run=run,
             max_rounds=args.max_rounds,
             max_repairs=args.max_repairs,
@@ -319,30 +316,26 @@ def main() -> None:
             parser.error("--max-rounds must be between 1 and 10.")
 
         graph = create_debate_graph(
-            agents,
+            lineup,
             stream=args.stream,
         )
-        debate_state: DebateState = {
-                    "context": (
-                        "A new Wordle game has started. "
-                        "No guesses have been submitted. "
-                        "Six attempts remain. "
-                        "Propose uppercase five-letter guesses. "
-                        "No target word or feedback is available. "
-                        "Do not invent feedback."
-                    ),
-                    "proposal": "",
-                    "alternative": "",
-                    "transcript": [],
-                    "final_action": "",
-                    "round": 0,
-                    "max_rounds": args.max_rounds,
-                    "stop": False,
-                }
+        debate_state = new_debate_state(
+            (
+                "A new Wordle game has started. "
+                "No guesses have been submitted. "
+                "Six attempts remain. "
+                "Propose uppercase five-letter guesses. "
+                "No target word or feedback is available. "
+                "Do not invent feedback."
+            ),
+            args.max_rounds,
+        )
         result = graph.invoke(
             debate_state,
             {
-                "recursion_limit": args.max_rounds * 3 + 5,
+                "recursion_limit": recursion_limit(
+                    args.max_rounds, len(lineup.advisors)
+                ),
             },
         )
 
@@ -352,7 +345,7 @@ def main() -> None:
         print(f"Termination: {result['termination']}")
 
         return
-    negative = agents[AgentRole.NEGATIVE]
+    negative = lineup.advisors[0]
 
     context = (
         "A new Wordle game has started. "

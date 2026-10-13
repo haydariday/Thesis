@@ -157,6 +157,15 @@ class Lineup:
     advisors: tuple[Agent, ...]
     preset: str | None = None
 
+    @property
+    def agents(self) -> tuple[Agent, ...]:
+        return (self.gm, *self.advisors)
+
+    def instructions(self) -> dict[str, str]:
+        """System prompt per role, in speaking order, for run metadata."""
+
+        return {agent.role.value: agent.instruction for agent in self.agents}
+
 
 def _role_for(spec: PersonaSpec) -> AgentRole:
     return AgentRole.GM if spec.slot == Slot.GM else AgentRole(spec.key)
@@ -221,11 +230,3 @@ def create_lineup(
         preset=preset,
     )
 
-
-def create_agents(
-    backend: ModelBackend | None = None,
-) -> dict[AgentRole, Agent]:
-    """The pilot-01 line-up keyed by role, as the fixed debate graph expects."""
-
-    lineup = create_lineup(backend, preset="pilot-01")
-    return {agent.role: agent for agent in (lineup.gm, *lineup.advisors)}
