@@ -222,17 +222,50 @@ Output goes to `experiments/pilot-02-*/figures/` as both PDF (vector, for the pa
 
 Pilot-01 can be re-plotted with F2, F5, F6 and F7 (using easy/hard or quartiles) so that the two pilots can be compared visually.
 
-## 9. Work list (to implement after this plan is approved)
+## 9. Implementation phases
 
-1. `human_data.py`: produce the clean 7-bin CSV and quartile cut-points, with tests.
-2. Persona registry, presets, CLI flags and the dynamic advisor nodes in the debate graph. Keep a `pilot-01` preset and update the existing tests.
-3. Per-turn instrumentation (Section 2.3) in `play.py` and `run_log.py`.
-4. Pilot-02 manifests (`pilot-02-deep.csv`, `pilot-02-wide.csv`) built with stratified quartile sampling and recorded seeds.
-5. Model probe: confirm that `temperature` is accepted and that usage is reported.
-6. Decide and record the temperature and the RQ1 equivalence tolerance before running anything.
-7. Run Exp A and Exp B with the existing resumable runner.
-8. `analysis_pilot02.py` (Section 7) and `plots.py` (Section 8).
-9. Write a pilot-02 findings section in the roadmap and decide the final-study sizes from the observed variance.
+The work is split into 15 small phases. Each phase ends in one commit on `pilot-2`, has a clear "done when" check, and can be reviewed on its own. Phases marked **offline** use no API calls. Phases marked **live** spend tokens.
+
+### Track overview
+
+```text
+Gate          P0 decisions
+Data track    P1 clean 7-bin data -> P2 quartiles + F1 -> P3 manifests
+Persona track P4 registry -> P5 dynamic graph -> P6 CLI/config -> P7 instrumentation
+Live check    P8 probe + smoke game -> P9 freeze config
+Runs          P10 Exp B wide -> P11 Exp A deep
+Analysis      P12 RQ1/mean/quartile -> P13 distribution + persona -> P14 figures F2-F9
+Write-up      P15 findings + final sizing
+```
+
+The data track and the persona track are independent, so they can be done in either order. P12 to P14 can be written and tested on synthetic run files while P10 and P11 are running.
+
+### Phase table
+
+| Phase | Goal | Main tasks | Done when | Mode | Size |
+|---|---|---|---|---|---|
+| **P0** Decisions | Fix the choices that cannot change after runs start | Choose the temperature (Section 6) and the RQ1 equivalence tolerance. Confirm the RQ2 wording change with the supervisor. | Both values are written in Section 1 and the README. | offline | S |
+| **P1** Clean human data | Turn `individual` into a 7-bin distribution | Add `experiment/human_data.py`, reusing `manifest.audit_record`. Write `p1 … p7`, `human_mean` and its low/high bounds, `sample`, notes and a duplicate-answer flag. | `src/data/processed/wordle_human_clean.csv` exists with 1,865 rows (1,861 eligible), and tests check that each row's bins sum to 1 and that the means match `manifest.py`. | offline | S |
+| **P2** Quartiles and F1 | Define D1–D4 and check them visually | Rank-based split into four groups of equal size. Save the cut-points to `quartiles.json`. Create `experiment/plots.py` with figure F1 only. | Group sizes are 465/465/465/466, the cut-points are about 3.98, 4.24 and 4.53, and F1 renders cleanly as PDF and PNG. | offline | S |
+| **P3** Manifests | Select the pilot-02 puzzles | Stratified sampling by quartile with seeds `20261013` (deep, 3 per quartile) and `20261014` (wide, 12 per quartile). Exclude pilot-01 puzzles and duplicate answers. Keep the two sets disjoint. | `pilot-02-deep.csv` (12 rows) and `pilot-02-wide.csv` (48 rows) exist, and a test confirms no overlap and identical output on a re-run. | offline | S |
+| **P4** Persona registry | Make personas data, not code | Add `PersonaSpec`, `PERSONAS` and `PRESETS`, and move the existing GM, Negative and Positive into the registry. Add Bold, Cautious and Casual. `create_agents(preset=…)` returns the GM and an ordered advisor list. | The `pilot-01` preset builds the same agents and instructions as before, and the current tests pass unchanged. | offline | S |
+| **P5** Dynamic debate graph | Allow any number of advisors | `sequential.py` builds one node per advisor. Replace `alternative` with `suggestions`. Apply `action_rule` checks for each persona. The GM review prompt lists every suggestion. | `debate_flow_test` passes for `pilot-01` (2 advisors, same call counts as before) and for `pilot-02` (3 advisors). | offline | M |
+| **P6** CLI and config wiring | Choose personas without editing code | Add `--persona-preset` and `--advisors` to the runner and to `debate_test`. Write the chosen keys and full instructions into `experiment_config.json` and each run's metadata. | A scripted-backend run records `bold, cautious, casual` in its config and metadata. | offline | S |
+| **P7** Turn instrumentation | Log the GM and persona statistics | Add `initial_proposal`, `gm_retained`, `advisor_suggestions`, `adopted_from`, `advisor_agreed`, `is_candidate` and `candidates_remaining` (Section 2.3). Candidate checks use public feedback only. | Scripted tests cover retain, adopt and agree cases, and a test confirms that the answer word never appears in any prompt. | offline | M |
+| **P8** Probe and smoke game | Confirm the model works end to end | One call to `glm-5.3-flash` with `temperature`, checking usage and the returned model ID. Then play one full game with the `pilot-02` preset. | The probe JSON and one completed run JSON are saved, and a manual read of the transcript shows each persona arguing in character. Fall back to `deepseek-v4-flash` if the probe fails. | live (tiny) | S |
+| **P9** Freeze configuration | Lock pilot-02 | Record the model, the returned snapshot, the temperature, the personas, the prompts, the hashes and the code revision. Tag the commit `pilot-02-frozen`. | The tag exists, and nothing in Section 1 or 6 changes after it. | offline | S |
+| **P10** Run Exp B (wide) | Collect the mean-alignment and quartile data first | 48 puzzles × 3 runs = 144 games, run in chunks with `--max-seconds` and resume. It goes first because it is shorter and gives an early check of the personas. | 48 × 3 completed games, or failures documented under the replacement policy. | live (~5 h) | M |
+| **P11** Run Exp A (deep) | Collect the RQ1 and distribution data | 12 puzzles × 32 runs = 384 games, in chunks with resume. | 12 × 32 completed games, or failures documented. | live (~13 h) | L |
+| **P12** Analysis: RQ1, mean, quartile | Core metrics | Add `analysis_pilot02.py`, reusing the `analysis.py` helpers: within-puzzle SD, ICC(1,1) and ICC(1,k), MAE, signed error, Spearman, Pearson, the 4×4 confusion matrix, quadratic-weighted kappa and bootstrap CIs. | Tests on synthetic runs reproduce known values, and the module produces `metrics.json` and `puzzle_summary.csv`. | offline | M |
+| **P13** Analysis: distribution and persona | Supervisor's comparison and persona statistics | W1, JSD, TVD and chi-square for each puzzle, bootstrap CIs over runs and the split-half W1. Also GM retention and advisor adoption, agreement and non-candidate shares. | Hand-checked synthetic cases pass, and the module writes `distribution_summary.csv` and `persona_stats.csv`. | offline | M |
+| **P14** Figures F2–F9 | Visualize every result | Add F2–F9 to `plots.py`, reading only the analysis outputs. Re-plot pilot-01 with F2, F5, F6 and F7 for comparison. | All figures exist as PDF and PNG at IEEE widths and pass a visual check for clipping, overlap and contrast. | offline | M |
+| **P15** Findings and final sizing | Close pilot-02 | Write a pilot-02 findings section in the roadmap. Use the observed variance to size the final study (runs per puzzle and puzzles per quartile). | The roadmap is updated, and the final-study sizes are recorded before any final run. | offline | S |
+
+### Checkpoints
+
+- **After P7:** all code changes are done and tested offline. Review the diff before spending any tokens.
+- **After P8:** a go/no-go decision on the model and the persona behavior.
+- **After P10:** a quick look at the persona statistics. If Bold and Cautious do not differ in their non-candidate share, fix the prompts and repeat P8 and P9 before running P11. Any wide games already played then belong to a different configuration and must be reported separately.
 
 ## 10. Open questions for the supervisor
 
