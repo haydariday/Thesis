@@ -19,6 +19,15 @@ Global docs: `Wordle Multi-Agent Playtesting Research Context and Experiment Roa
   ```
 
   This also writes `src/data/processed/quartiles.json` (P2): D1–D4 by rank of human mean, sizes 465/465/465/466, cut-points 3.98/4.24/4.53, mapping rule for system scores. Figure F1: `experiments/pilot-02/figures/` (needs `uv sync --extra viz`).
+- Pilot-02 manifests (P3): `experiments/manifests/pilot-02-deep.csv` (12, 3 per quartile, seed `20261013`) and `pilot-02-wide.csv` (48, 12 per quartile, seed `20261014`), plus `pilot-02.summary.json`. Pool = eligible, unique answer, not pilot-01 (1,789). Deep is drawn first, wide excludes it. Refuses to run if the clean CSV hash differs from the one frozen in `quartiles.json`. Rebuild:
+
+  ```bash
+  uv run python -m multi_agent_testing.experiment.manifest_pilot02 \
+    --clean-csv src/data/processed/wordle_human_clean.csv \
+    --quartiles src/data/processed/quartiles.json \
+    --exclude-manifest experiments/manifests/pilot-01.csv \
+    --output-dir experiments/manifests
+  ```
 
 ## Quickstart
 
