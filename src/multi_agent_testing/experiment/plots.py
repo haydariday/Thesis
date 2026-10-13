@@ -45,6 +45,13 @@ QUARTILE_COLOURS = {
     "D3": "#E69F00",  # orange
     "D4": "#D55E00",  # vermillion
 }
+# Darker text variants of the same hues, for labels on white (WCAG >= 4.5:1).
+QUARTILE_TEXT_COLOURS = {
+    "D1": "#0B5F8F",
+    "D2": "#00674B",
+    "D3": "#8A5A00",
+    "D4": "#A63F00",
+}
 # Guess-count bins: light-to-dark blue for solves, a dark neutral for fail so
 # it never reads as "one more guess".
 BIN_COLOURS = ("#deebf7", "#c6dbef", "#9ecae1", "#6baed6", "#3182bd", "#08519c", "#3a3a3a")
@@ -127,12 +134,13 @@ def figure_f1(clean_csv: Path, quartiles_json: Path, output_dir: Path) -> list[P
         color=[QUARTILE_COLOURS[q] for q in QUARTILE_LABELS],
         edgecolor="white", linewidth=0.3, label=list(QUARTILE_LABELS),
     )
-    ymax = ax_hist.get_ylim()[1] * 1.28
+    ymax = ax_hist.get_ylim()[1] * 1.22
     ax_hist.set_ylim(0, ymax)
     for cut in cuts:
-        ax_hist.axvline(cut, color="#333333", linestyle=(0, (3, 2)), linewidth=0.7)
-        ax_hist.text(cut, ymax * 0.985, f"{cut:.2f}", ha="center", va="top", fontsize=6.5,
-                     color="#333333", bbox={"facecolor": "white", "edgecolor": "none", "pad": 0.6})
+        ax_hist.axvline(cut, ymax=0.97, color="#333333", linestyle=(0, (3, 2)), linewidth=0.7)
+        # Cut values sit just above the axes, clear of bars and labels.
+        ax_hist.text(cut, ymax * 1.005, f"{cut:.2f}", ha="center", va="bottom", fontsize=6.5,
+                     color="#333333", clip_on=False)
     centres = [
         (ranges["D1"]["min"] + cuts[0]) / 2,
         (cuts[0] + cuts[1]) / 2,
@@ -140,12 +148,12 @@ def figure_f1(clean_csv: Path, quartiles_json: Path, output_dir: Path) -> list[P
         (cuts[2] + 5.0) / 2,
     ]
     for label, x in zip(QUARTILE_LABELS, centres):
-        ax_hist.text(x, ymax * 0.875, label, ha="center", va="center", fontsize=8,
-                     fontweight="bold", color=QUARTILE_COLOURS[label])
+        ax_hist.text(x, ymax * 0.9, label, ha="center", va="center", fontsize=8,
+                     fontweight="bold", color=QUARTILE_TEXT_COLOURS[label])
     ax_hist.set_xlim(low, high)
     ax_hist.set_xlabel("Human mean guess score (fail = 7)")
     ax_hist.set_ylabel("Puzzles per bin (width \u2248 0.05)")
-    ax_hist.set_title(f"(a) Human difficulty, n = {spec['population_size']:,}", loc="left")
+    ax_hist.set_title(f"(a) Human difficulty, n = {spec['population_size']:,}", loc="left", pad=11)
 
     # (b) Mean 7-bin distribution per quartile.
     y_positions = list(range(len(QUARTILE_LABELS)))[::-1]  # D1 on top
@@ -166,13 +174,13 @@ def figure_f1(clean_csv: Path, quartiles_json: Path, output_dir: Path) -> list[P
         fontsize=7,
     )
     for tick, label in zip(ax_bins.get_yticklabels(), QUARTILE_LABELS):
-        tick.set_color(QUARTILE_COLOURS[label])
+        tick.set_color(QUARTILE_TEXT_COLOURS[label])
         tick.set_fontweight("bold")
     ax_bins.set_xlim(0, 1)
     ax_bins.set_xticks([0, 0.25, 0.5, 0.75, 1.0])
     ax_bins.set_xticklabels(["0", "25", "50", "75", "100"])
     ax_bins.set_xlabel("Share of human games (%)")
-    ax_bins.set_title("(b) Mean guess-count distribution", loc="left")
+    ax_bins.set_title("(b) Mean guess-count distribution", loc="left", pad=11)
     ax_bins.spines["left"].set_visible(False)
     ax_bins.tick_params(axis="y", length=0)
     handles = [Patch(facecolor=c, edgecolor="#999999", linewidth=0.3) for c in BIN_COLOURS]
