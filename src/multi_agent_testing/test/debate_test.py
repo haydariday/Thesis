@@ -3,7 +3,6 @@ import hashlib
 import os
 from getpass import getpass
 from pathlib import Path
-from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 
@@ -14,6 +13,15 @@ from ..agent.backend import (
     ScriptedBackend,
 )
 from ..agent.persona_args import add_persona_arguments, lineup_from_args
+from ..agent.providers import (
+    PROVIDERS,
+    THINKING_MODES,
+    default_api_key_env,
+    endpoint_error,
+    extra_body,
+    request_options_error,
+    settings_error,
+)
 from ..games.wordle.bridge import WordleBridge
 from ..games.wordle.dataset import load_allowed_guesses, load_puzzle
 from ..games.wordle.engine import WordleGame
@@ -52,7 +60,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--backend",
-        choices=["scripted", "ollama", "zen"],
+        choices=["scripted", "ollama", *PROVIDERS],
         default="scripted",
         help="Which backend to use.",
     )
@@ -64,8 +72,22 @@ def main() -> None:
     )
     parser.add_argument(
         "--api-key-env",
-        default="OPENCODE_API_KEY",
-        help="Environment variable containing the Zen API key.",
+        help="Key variable (default: OPENCODE_API_KEY for zen, DEEPSEEK_API_KEY for deepseek).",
+    )
+    parser.add_argument(
+        "--thinking",
+        choices=THINKING_MODES,
+        help="DeepSeek reasoning mode; temperature only applies when disabled.",
+    )
+    parser.add_argument(
+        "--max-tokens",
+        type=int,
+        help="Reply cap per call; a cut-off reply gets the repair re-ask.",
+    )
+    parser.add_argument(
+        "--json-mode",
+        action="store_true",
+        help="Ask the provider for a well-formed JSON object (response_format).",
     )
     parser.add_argument(
         "--debate",
@@ -161,10 +183,12 @@ def main() -> None:
                 args.model,
                 args.base_url,
                 args.temperature,
+                args.thinking,
+                args.max_tokens,
             )
         ):
             parser.error(
-                "Select --backend ollama or zen when supplying "
+                "Select a model backend when supplying "
                 "model connection settings."
             )
 
@@ -181,44 +205,33 @@ def main() -> None:
     else:
         if not args.model or not args.base_url:
             parser.error(
-                "--backend ollama or zen requires --model and --base-url"
+                f"--backend {args.backend} requires --model and --base-url"
             )
 
-        if args.protocol == "chat" and args.temperature is None:
-            parser.error(
-                "--temperature is required with the chat protocol"
-            )
+        error = settings_error(
+            args.backend, args.protocol, args.temperature, args.thinking
+        ) or endpoint_error(args.backend, args.base_url) or request_options_error(
+            args.protocol, args.max_tokens, args.json_mode
+        )
+        if error is not None:
+            parser.error(error)
 
         if args.stream and args.protocol == "responses":
             parser.error(
                 "--stream is not supported with --protocol responses"
             )
 
-        if args.backend == "zen":
-            endpoint = urlparse(args.base_url)
-
-            if (
-                endpoint.scheme != "https"
-                or endpoint.hostname != "opencode.ai"
-                or endpoint.username is not None
-                or endpoint.password is not None
-                or endpoint.query
-                or endpoint.fragment
-            ):
-                parser.error(
-                    "Use an HTTPS OpenCode endpoint without "
-                    "embedded credentials or query parameters."
-                )
-
-            api_key = os.environ.get(args.api_key_env, "").strip()
+        if args.backend in PROVIDERS:
+            key_env = args.api_key_env or default_api_key_env(args.backend)
+            api_key = os.environ.get(key_env or "", "").strip()
 
             if not api_key:
                 api_key = getpass(
-                    "OpenCode Zen API key (input hidden): "
+                    f"{key_env} (input hidden): "
                 ).strip()
 
             if not api_key:
-                parser.error("The Zen API key cannot be empty.")
+                parser.error("The API key cannot be empty.")
 
         else:
             # Local Ollama's SDK placeholder, not a real secret.
@@ -241,6 +254,9 @@ def main() -> None:
                 api_key=api_key,
                 request_timeout=args.request_timeout,
                 api_retries=args.api_retries,
+                extra_body=extra_body(args.thinking),
+                max_tokens=args.max_tokens,
+                json_mode=args.json_mode,
             )
 
         print(
@@ -272,6 +288,9 @@ def main() -> None:
                 "model_requested": args.model,
                 "base_url": args.base_url,
                 "temperature": args.temperature,
+                "thinking": args.thinking,
+                "max_tokens": args.max_tokens,
+                "json_mode": args.json_mode,
                 "stream": args.stream,
                 "max_rounds": args.max_rounds,
                 "max_repairs": args.max_repairs,
@@ -315,7 +334,7 @@ def main() -> None:
             parser.error(
                 "The current scripted backend is a single-response "
                 "fixture, not a complete debate simulator. "
-                "Use ollama or zen for this test."
+                "Use a model backend for this test."
             )
 
         if not 1 <= args.max_rounds <= 10:

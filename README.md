@@ -34,10 +34,11 @@ Global docs: `Wordle Multi-Agent Playtesting Research Context and Experiment Roa
 ```bash
 # smoke test, one game
 uv run python -m multi_agent_testing.test.debate_test \
-  --backend zen --protocol chat \
-  --model glm-5.3-flash \
-  --base-url 'https://opencode.ai/zen/v1/' \
-  --temperature 0.2 --play --max-rounds 3 \
+  --backend deepseek --protocol chat \
+  --model deepseek-flash \
+  --base-url 'https://api.deepseek.com' \
+  --thinking disabled --temperature 0.2 --max-tokens 1024 --json-mode \
+  --play --max-rounds 3 \
   --persona-preset pilot-02 \
   --dataset src/data/raw/worldepuzzles.json \
   --puzzle-id 234 --guess-list src/data/raw/allowed_guesses.txt
@@ -48,9 +49,10 @@ uv run python -m multi_agent_testing.experiment.runner start \
   --manifest experiments/manifests/pilot-02-deep.csv \
   --dataset src/data/raw/worldepuzzles.json \
   --guess-list src/data/raw/allowed_guesses.txt \
-  --backend zen --protocol chat --model glm-5.3-flash \
-  --base-url 'https://opencode.ai/zen/v1/' \
-  --temperature 0.2 --max-rounds 3 --max-repairs 1 \
+  --backend deepseek --protocol chat --model deepseek-flash \
+  --base-url 'https://api.deepseek.com' \
+  --thinking disabled --temperature 0.2 --max-tokens 1024 --json-mode \
+  --max-rounds 3 --max-repairs 1 \
   --request-timeout 300 --api-retries 1 \
   --repetitions 32 --max-attempts 2 \
   --persona-preset pilot-02
@@ -58,12 +60,12 @@ uv run python -m multi_agent_testing.experiment.runner start \
 
 Personas: `runner start` needs `--persona-preset {pilot-01,pilot-02,pilot-02-core}` or `--advisors bold,cautious[,casual]` (speaking order), optional `--gm`. `debate_test` defaults to `pilot-02`. The keys and full persona text go to `settings.personas` in `experiment_config.json` and to each run's metadata. `resume` rebuilds the line-up from the config and refuses if the registry text has changed since `start`.
 
-Key in ignored `.env` as `OPENCODE_API_KEY`, never in source or logs.
+Keys in ignored `.env` as `DEEPSEEK_API_KEY` (`--backend deepseek`) or `OPENCODE_API_KEY` (`--backend zen`), never in source or logs. DeepSeek needs `--thinking enabled|disabled`: thinking mode ignores temperature, so the runner refuses `--temperature` with `--thinking enabled`.
 
 ## Frozen configs
 
 - Pilot-01: `gpt-6-luna`, `responses`, temperature `null` (rejected by model), 20 puzzles x 3 reps. See `experiments/pilot-01/experiment_config.json`.
-- Pilot-02: `deepseek-flash` (DeepSeek-V4.1-Flash) on the DeepSeek API, `chat`, thinking `disabled`, temperature `0.2` (decided at P0; favors RQ1 over distribution spread). The model ID is an alias that DeepSeek re-pointed once already (V4 → V4.1 on 2026-09-10), so check the per-call `system_fingerprint`, not only `model`. Personas `bold/cautious/casual`, `max_rounds=3`, `max_repairs=1`, timeout 300, retries 1. Exp A deep 12 x 32, Exp B wide 48 x 3, disjoint, seeds `20261013`/`20261014`.
+- Pilot-02: `deepseek-flash` (DeepSeek-V4.1-Flash) on the DeepSeek API, `chat`, thinking `disabled`, temperature `0.2` (decided at P0; favors RQ1 over distribution spread). The model ID is an alias that DeepSeek re-pointed once already (V4 → V4.1 on 2026-09-10), so check the per-call `system_fingerprint`, not only `model`. `max_tokens=1024`, JSON mode, `known_letters` in the observation (P8). Personas `bold/cautious/casual`, `max_rounds=3`, `max_repairs=1`, timeout 300, retries 1. Exp A deep 12 x 32, Exp B wide 48 x 3, disjoint, seeds `20261013`/`20261014`.
 
 ## Pilot → final reuse rules
 

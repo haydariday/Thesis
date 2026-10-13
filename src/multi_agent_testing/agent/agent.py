@@ -4,7 +4,13 @@ from dataclasses import dataclass, field
 
 from ..decision import AgentDecision
 from .agent_role import AgentRole
-from .backend import Completion, Messages, ModelBackend
+from .backend import (
+    Completion,
+    EmptyReply,
+    Messages,
+    ModelBackend,
+    TruncatedReply,
+)
 from .persona_spec import PersonaSpec
 
 
@@ -61,7 +67,7 @@ class Agent:
             "Return exactly one JSON object matching this schema:\n"
             f"{schema}\n"
             "Do not include markdown fences or text outside the JSON. "
-            "Give a concise public justification in reason. "
+            "Keep reason short: at most two sentences and about 40 words. "
             "Advisors must set stop to false."
         )
 
@@ -76,6 +82,16 @@ class Agent:
             completion = self.backend.complete(messages)
             self.last_completion = completion
             raw_response = completion.text
+
+            if completion.finish_reason == "length":
+                raise TruncatedReply(
+                    "The reply was cut off at the token limit. "
+                    "Return only the JSON object with a shorter reason."
+                )
+            if not raw_response:
+                raise EmptyReply(
+                    "The reply was empty. Return the JSON object."
+                )
         else:
             parts: list[str] = []
 

@@ -56,6 +56,8 @@ agent/personas.py
 
 Advisors use `action_rule = "any"`. That means an advisor may agree with the GM by returning the same word, which is recorded as agreement rather than rejected.
 
+**Sign-off (2026-10-13, after P8):** the persona texts in `agent/personas.py` are accepted unchanged, including Casual's "habitual opening word". In the P8 smoke games Casual proposed CRANE as its opener in all three games at temperature 1.0, while at 0.2 it agreed with the GM. The GM itself proposed SLATE on turn 1 in 5 of 6 games and CRANE on turn 2 in 5 of 6. Repeated openers are realistic for daily players, but they raise RQ1 consistency, so P13 reports the opening guesses and their source (Section 7).
+
 ### 2.3 New per-turn instrumentation
 
 These fields are logged in every turn record. They feed the persona statistics now and a possible GM-persona RQ later.
@@ -174,8 +176,11 @@ For the pilot, [Julious (2005)](https://onlinelibrary.wiley.com/doi/abs/10.1002/
 - **Thinking mode `disabled`:** DeepSeek's thinking mode is the default, and it ignores `temperature` ([thinking mode guide](https://api-docs.deepseek.com/guides/thinking_mode)). Non-thinking mode keeps the P0 temperature meaningful, and it is faster and cheaper. The debate is the reasoning step. The runner refuses `--temperature` with `--thinking enabled`.
 - **Snapshot drift:** `deepseek-flash` is an alias. DeepSeek moved it from V4 to V4.1 on 2026-09-10 without a new name, and the returned `model` field only echoes the alias. Each call therefore logs `system_fingerprint`. P10 and P11 run back to back, with the dates recorded. A fingerprint change during the runs splits the configuration.
 - **Temperature (decided at P0: `0.2`):** a low temperature favors RQ1 consistency but narrows the system's distribution. That weakens the RQ2 distribution comparison, and the results must say so. A higher value (for example 1.0) would treat each run as one simulated player. That option stays open for a later configuration.
+- **Reply settings (added at P8):** `max_tokens=1024` (valid replies stay under about 200 tokens), DeepSeek JSON mode (`response_format: json_object`), and a shared prompt line "Keep reason short: at most two sentences and about 40 words." A reply cut off at the cap or returned empty is a rejection with the normal repair re-ask, and a missing `stop` field means `false`. Each call logs `system_fingerprint`, cached prompt tokens and, for rejected attempts, the raw reply text.
+- **Observation (added at P8):** besides the raw history, agents see `known_letters`, a summary computed from public feedback only: the green pattern, misplaced letters with their excluded positions, absent letters and known letter counts. It plays the role of the colored keyboard a human player sees. It contains no candidate list and no example, so the method stays zero-shot. A property test checks that it never rules out a word the feedback still allows.
+- **P8 smoke evidence (puzzle 234, FRAME, human mean 4.41):** before the reply settings and `known_letters`, games crashed on runaway replies or lost with most guesses unable to be the answer. With both in place, 3 games at 0.2 won in 5, 4 and 5 guesses, while 3 games at 1.0 all lost. At 0.2 the non-candidate share of suggestions from turn 2 on was 7/33 for Bold, 15/33 for Cautious and 3/33 for Casual, which is the intended Bold/Cautious direction. These are pilot checks on one puzzle, not results. All files are in `runs/` (`probe-*`, `smoke-pilot-02-*`, `smoke-known-*`).
 - **Unchanged from pilot-01:** `max_rounds=3`, non-streaming, `max_repairs=1`, `request_timeout=300`, `api_retries=1`, `max_attempts_per_unit=2`, and the vocabulary and dataset hashes.
-- **Cost estimate:** with three advisors a turn has five calls instead of four, so about 119 s and 18k tokens per game. Exp A and Exp B together come to about 528 games, 17–18 hours and 9.5M tokens. The real speed depends on the chosen model.
+- **Cost estimate (measured at P8, temperature 0.2):** about 57 s, 61 calls, 57k prompt tokens (23k from cache) and 3k completion tokens per game, or about $0.007 at off-peak prices. The 528 games of Exp A and Exp B come to about 8.5 hours and $4 off-peak, or about $8 at peak prices.
 
 ## 7. Analysis
 
@@ -207,7 +212,7 @@ For each puzzle, compare the system's 7-bin distribution (32 runs) with the huma
 
 ### Persona and GM statistics (both experiments, descriptive)
 
-GM retention rate, adoption rate for each advisor, agreement rate for each advisor, non-candidate share for each advisor (the manipulation check), and the termination mix (`gm_stop` versus `max_rounds`).
+GM retention rate, adoption rate for each advisor, agreement rate for each advisor, non-candidate share for each advisor (the manipulation check), and the termination mix (`gm_stop` versus `max_rounds`). Also the distribution of opening guesses (turns 1 and 2) per puzzle and which agent proposed each, since repeated openers raise RQ1 consistency (Section 2.2).
 
 ### Reliability (supporting)
 

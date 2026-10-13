@@ -1,0 +1,255 @@
+{
+  "schema_version": 1,
+  "run_id": "f2cb2f6a5b4b47eca24d036236a5947f",
+  "created_at": "2026-10-13T10:40:58.351026+00:00",
+  "status": "failed",
+  "metadata": {
+    "backend": "zen",
+    "protocol": "chat",
+    "model_requested": "glm-5.3-flash",
+    "base_url": "https://opencode.ai/zen/v1/",
+    "temperature": 0.2,
+    "stream": false,
+    "max_rounds": 3,
+    "max_repairs": 1,
+    "request_timeout": 300.0,
+    "api_retries": 1,
+    "puzzle_id": "234",
+    "target_answer": "FRAME",
+    "guess_policy": "supplied_vocabulary",
+    "vocabulary_size": 14855,
+    "dataset_sha256": "ed235aa79e1c13a684b7517dda08976967ce8ddb653943632d71b7dea2c41a27",
+    "guess_list_sha256": "9df5dad1b44cf1b9e0fa7c3ebff94d69ff7efb59f8691ac88e74e1c7b3da121e",
+    "agent_instructions": {
+      "gm": "You are the GM in a Wordle playtesting system. Propose a guess based on the available game state. After the advisors respond, evaluate every advisor's argument and retain or revise your proposal. Do not invent game feedback or claim unanimous agreement.",
+      "bold": "You are the Bold advisor in a Wordle playtesting system. You prefer guesses that could still be the answer, so the game can be won as early as possible. Critique the GM's proposal from this view and suggest a better candidate answer if one exists. Accept the risk of using more guesses later.",
+      "cautious": "You are the Cautious advisor in a Wordle playtesting system. You prefer guesses that rule out the most remaining letters, even if the guess cannot be the answer. Critique the GM's proposal from this view and suggest a more informative guess if one exists. Your priority is never losing the game.",
+      "casual": "You are the Casual advisor in a Wordle playtesting system. You play like a typical daily player. You prefer common, familiar words and a habitual opening word. You do not compute letter statistics. Critique the GM's proposal from this view and suggest the guess an everyday player would make."
+    },
+    "personas": {
+      "preset": "pilot-02",
+      "gm": "neutral_gm",
+      "advisors": [
+        "bold",
+        "cautious",
+        "casual"
+      ],
+      "specs": {
+        "neutral_gm": {
+          "display_name": "Game Master",
+          "slot": "gm",
+          "instruction": "You are the GM in a Wordle playtesting system. Propose a guess based on the available game state. After the advisors respond, evaluate every advisor's argument and retain or revise your proposal. Do not invent game feedback or claim unanimous agreement.",
+          "task": "",
+          "action_rule": "any"
+        },
+        "bold": {
+          "display_name": "Bold Advisor",
+          "slot": "advisor",
+          "instruction": "You are the Bold advisor in a Wordle playtesting system. You prefer guesses that could still be the answer, so the game can be won as early as possible. Critique the GM's proposal from this view and suggest a better candidate answer if one exists. Accept the risk of using more guesses later.",
+          "task": "Critique the current GM proposal from the Bold view. Suggest a guess that could still be the answer and explain why. If the proposal is already the best such guess, return it unchanged. Set stop to false.",
+          "action_rule": "any"
+        },
+        "cautious": {
+          "display_name": "Cautious Advisor",
+          "slot": "advisor",
+          "instruction": "You are the Cautious advisor in a Wordle playtesting system. You prefer guesses that rule out the most remaining letters, even if the guess cannot be the answer. Critique the GM's proposal from this view and suggest a more informative guess if one exists. Your priority is never losing the game.",
+          "task": "Critique the current GM proposal from the Cautious view. Suggest the guess that rules out the most remaining letters and explain why, even if it cannot be the answer. If the proposal is already the most informative guess, return it unchanged. Set stop to false.",
+          "action_rule": "any"
+        },
+        "casual": {
+          "display_name": "Casual Advisor",
+          "slot": "advisor",
+          "instruction": "You are the Casual advisor in a Wordle playtesting system. You play like a typical daily player. You prefer common, familiar words and a habitual opening word. You do not compute letter statistics. Critique the GM's proposal from this view and suggest the guess an everyday player would make.",
+          "task": "Respond to the current GM proposal as an everyday player. Suggest the guess you would make and explain why in plain terms. If you would play the proposal too, return it unchanged. Set stop to false.",
+          "action_rule": "any"
+        }
+      }
+    }
+  },
+  "turns": [
+    {
+      "turn": 1,
+      "observation_before": {
+        "game": "wordle",
+        "word_length": 5,
+        "history": [],
+        "attempts_remaining": 6,
+        "done": false,
+        "won": false,
+        "guess_policy": "supplied_vocabulary"
+      },
+      "final_action": "SLATE",
+      "feedback": "BBGBG",
+      "initial_proposal": "SLATE",
+      "gm_retained": true,
+      "advisor_suggestions": [
+        {
+          "round": 1,
+          "advisor": "bold",
+          "action": "SLATE",
+          "gm_proposal": "SLATE",
+          "agreed": true,
+          "is_candidate": true
+        },
+        {
+          "round": 1,
+          "advisor": "cautious",
+          "action": "SLATE",
+          "gm_proposal": "SLATE",
+          "agreed": true,
+          "is_candidate": true
+        },
+        {
+          "round": 1,
+          "advisor": "casual",
+          "action": "ADIEU",
+          "gm_proposal": "SLATE",
+          "agreed": false,
+          "is_candidate": true
+        }
+      ],
+      "adopted_from": [],
+      "advisor_agreed": {
+        "bold": true,
+        "cautious": true,
+        "casual": false
+      },
+      "is_candidate": {
+        "initial_proposal": true,
+        "final_action": true
+      },
+      "candidates_remaining": 14855,
+      "debate_rounds": 1,
+      "gm_requested_stop": true,
+      "round_cap_reached": false,
+      "termination": "gm_stop",
+      "transcript": [
+        "GM proposes SLATE: Opening move with no feedback yet. SLATE covers five frequent letters (S, L, A, T, E) across distinct positions, maximizing expected information on first guess. No advisor input yet, so I retain my proposal and await debate.",
+        "Bold Advisor suggests SLATE: With no feedback yet, any vocabulary word could still be the hidden answer, and SLATE is both a plausible answer candidate and an elite opener: five distinct high-frequency letters (S, L, A, T, E) in common positions, maximizing early-win odds and information at once. No better Bold candidate exists, so I keep it.",
+        "Cautious Advisor suggests SLATE: Opening move with zero feedback: every vocabulary word is still live, so the right metric is expected elimination, and SLATE is already at the top of it. It packs five distinct, top-frequency letters (S, L, A, T, E) into common slots, splitting the candidate pool into highly informative green/yellow/gray patterns, and it is itself a plausible answer, so we lose nothing by playing it. Close rivals like CRANE, RAISE, or TRACE merely swap in letters of similar frequency and do not reliably rule out more candidates. Since no available guess eliminates more remaining letters, I keep SLATE unchanged.",
+        "Casual Advisor suggests ADIEU: Honestly, I don't think about letter frequencies or elimination math — I just have my usual starter and I play it every day. Mine is ADIEU. It's a real word I know, and knocking out four vowels right away is how I've always started, so I know what to do with whatever comes back. SLATE is a perfectly fine word and I wouldn't groan if the group played it, but it's not what my thumb types first. If ADIEU turns up some yellows, I'll build the next guess around those like I always do, sticking to words I actually use in conversation.",
+        "GM reviews and selects SLATE: Opening move with no feedback: all vocabulary words remain live, so expected information is the right metric. Bold and Cautious both independently endorse SLATE, citing its five distinct high-frequency letters (S, L, A, T, E) in common positions and its own plausibility as the answer. Casual proposes ADIEU out of personal habit; while its four-vowel check is a legitimate style, it sacrifices coverage of frequent consonants (S, T, L) and includes the rarer U and D, and ADIEU is a less likely answer candidate. I evaluate each argument on the merits: the two frequency-based cases outweigh the habitual preference, so I retain SLATE. This is not unanimous — Casual dissists — but the disagreement does not present a stronger option. With no feedback to change anyone's analysis, a further debate round is unlikely to alter this decision, so I stop here."
+      ],
+      "elapsed_seconds": 50.77608238300127
+    }
+  ],
+  "outcome": {
+    "game_finished": false,
+    "won": null,
+    "guesses_used": 1,
+    "solve_guesses": null,
+    "history": [
+      {
+        "guess": "SLATE",
+        "feedback": "BBGBG"
+      }
+    ]
+  },
+  "error": {
+    "type": "APITimeoutError"
+  },
+  "elapsed_seconds": 714.0510598460005,
+  "token_usage": {
+    "prompt_tokens": null,
+    "completion_tokens": null,
+    "total_tokens": null,
+    "calls": 8,
+    "calls_with_usage": 7,
+    "calls_missing_usage": 1
+  },
+  "calls": [
+    {
+      "role": "gm",
+      "attempt": 1,
+      "rejected": false,
+      "error_type": null,
+      "prompt_tokens": 409,
+      "completion_tokens": 143,
+      "total_tokens": 552,
+      "elapsed_seconds": 4.137017746999845,
+      "model": "glm-5.3-flash"
+    },
+    {
+      "role": "bold",
+      "attempt": 1,
+      "rejected": false,
+      "error_type": null,
+      "prompt_tokens": 505,
+      "completion_tokens": 290,
+      "total_tokens": 795,
+      "elapsed_seconds": 3.738060952999149,
+      "model": "glm-5.3-flash"
+    },
+    {
+      "role": "cautious",
+      "attempt": 1,
+      "rejected": false,
+      "error_type": null,
+      "prompt_tokens": 675,
+      "completion_tokens": 976,
+      "total_tokens": 1651,
+      "elapsed_seconds": 17.454321657000037,
+      "model": "glm-5.3-flash"
+    },
+    {
+      "role": "casual",
+      "attempt": 1,
+      "rejected": false,
+      "error_type": null,
+      "prompt_tokens": 939,
+      "completion_tokens": 1027,
+      "total_tokens": 1966,
+      "elapsed_seconds": 19.321358315999532,
+      "model": "glm-5.3-flash"
+    },
+    {
+      "role": "gm",
+      "attempt": 1,
+      "rejected": false,
+      "error_type": null,
+      "prompt_tokens": 1209,
+      "completion_tokens": 532,
+      "total_tokens": 1741,
+      "elapsed_seconds": 6.121291316998395,
+      "model": "glm-5.3-flash"
+    },
+    {
+      "role": "gm",
+      "attempt": 1,
+      "rejected": false,
+      "error_type": null,
+      "prompt_tokens": 425,
+      "completion_tokens": 357,
+      "total_tokens": 782,
+      "elapsed_seconds": 5.84298925999974,
+      "model": "glm-5.3-flash"
+    },
+    {
+      "role": "bold",
+      "attempt": 1,
+      "rejected": false,
+      "error_type": null,
+      "prompt_tokens": 525,
+      "completion_tokens": 4741,
+      "total_tokens": 5266,
+      "elapsed_seconds": 56.329808202001004,
+      "model": "glm-5.3-flash"
+    },
+    {
+      "role": "cautious",
+      "attempt": 1,
+      "rejected": false,
+      "error_type": "APITimeoutError",
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "total_tokens": null,
+      "elapsed_seconds": 601.062441656999,
+      "model": null
+    }
+  ],
+  "counters": {
+    "agent_calls": 8,
+    "rejected_responses": 0,
+    "backend_errors": 1
+  }
+}

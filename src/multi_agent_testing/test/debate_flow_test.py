@@ -297,6 +297,66 @@ class DebateFlowTests(unittest.TestCase):
             ["gm", "negative", "negative", "positive", "positive", "gm"],
         )
 
+    def test_cut_off_and_empty_replies_are_repaired(self):
+        cut_off = Completion(
+            text='{"action": "SLA',
+            prompt_tokens=10,
+            completion_tokens=1024,
+            total_tokens=1034,
+            finish_reason="length",
+        )
+        empty = Completion(text="", prompt_tokens=10, completion_tokens=0, total_tokens=10)
+        backend = RecordingSequenceBackend(
+            [
+                completion("RAISE", False),
+                cut_off,
+                completion("SLATE", False),
+                empty,
+                completion("CRANE", False),
+                completion("RAISE", False),
+                completion("RAISE", True),
+            ]
+        )
+        run = self.play(backend, "pilot-02", self.make_pilot_02_game(), max_rounds=1)
+
+        self.assertEqual(run.data["status"], "completed")
+        rejected = [call for call in run.data["calls"] if call["rejected"]]
+        self.assertEqual(
+            [(call["role"], call["error_type"]) for call in rejected],
+            [("bold", "TruncatedReply"), ("cautious", "EmptyReply")],
+        )
+        # The cut-off reply's tokens still count toward usage.
+        self.assertEqual(rejected[0]["completion_tokens"], 1024)
+        # Rejected text is kept for diagnosis; accepted calls store none.
+        self.assertEqual(rejected[0]["rejected_text"], '{"action": "SLA')
+        self.assertEqual(rejected[1]["rejected_text"], "")
+        self.assertTrue(
+            all(call["rejected_text"] is None for call in run.data["calls"] if not call["rejected"])
+        )
+        self.assertIn("cut off", backend.calls[2][1]["repair"]["validation_error"])
+
+    def test_missing_stop_means_continue_without_a_repair(self):
+        no_stop = Completion(text='{"action": "SLATE", "reason": "test reason"}')
+        backend = SequenceBackend(
+            [
+                completion("RAISE", False),
+                no_stop,
+                no_stop,
+                no_stop,
+                Completion(text='{"action": "SLATE", "reason": "test reason"}'),  # review: no stop
+                completion("SLATE", False),
+                completion("SLATE", False),
+                completion("SLATE", False),
+                completion("SLATE", True),
+            ]
+        )
+        run = self.play(backend, "pilot-02", self.make_pilot_02_game(), max_rounds=2)
+
+        self.assertEqual(run.data["counters"]["rejected_responses"], 0)
+        # The GM's missing stop at review 1 continued the debate to round 2.
+        self.assertEqual(run.data["turns"][0]["debate_rounds"], 2)
+        self.assertEqual(run.data["turns"][0]["termination"], "gm_stop")
+
     def test_pilot_02_runs_three_advisors_in_order(self):
         backend = SequenceBackend(
             [
@@ -358,6 +418,9 @@ class DebateFlowTests(unittest.TestCase):
         )
         self.assertEqual(payloads[2]["suggestions"], {"bold": {"action": "SLATE", "reason": "test reason"}})
         self.assertEqual(payloads[5]["suggestions"], {})  # round 2, first advisor
+        # Every agent gets the same reply-length limit.
+        for system, _ in backend.calls:
+            self.assertIn("at most two sentences and about 40 words", system)
         self.assertEqual(run.data["turns"][0]["final_action"], "SLATE")
 
     def test_pilot_02_reaches_round_cap_without_recursion_error(self):

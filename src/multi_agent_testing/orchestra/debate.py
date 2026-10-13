@@ -56,6 +56,21 @@ def create_debate_graph(
             model=(
                 completion.model if completion is not None else None
             ),
+            system_fingerprint=(
+                completion.system_fingerprint
+                if completion is not None
+                else None
+            ),
+            cached_prompt_tokens=(
+                completion.cached_prompt_tokens
+                if completion is not None
+                else None
+            ),
+            rejected_text=(
+                completion.text
+                if rejected and completion is not None
+                else None
+            ),
         )
 
     def ask(

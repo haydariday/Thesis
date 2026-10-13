@@ -27,6 +27,15 @@ from dotenv import load_dotenv
 from ..agent.backend import ChatCompletionsBackend, ResponsesBackend
 from ..agent.persona_args import add_persona_arguments, lineup_from_args
 from ..agent.personas import lineup_from_config
+from ..agent.providers import (
+    PROVIDERS,
+    THINKING_MODES,
+    default_api_key_env,
+    endpoint_error,
+    extra_body,
+    request_options_error,
+    settings_error,
+)
 from ..games.wordle.bridge import WordleBridge
 from ..games.wordle.dataset import (
     WordlePuzzle,
@@ -127,6 +136,9 @@ def build_config(args) -> dict:
         "model": args.model,
         "base_url": args.base_url,
         "temperature": args.temperature,
+        "thinking": args.thinking,
+        "max_tokens": args.max_tokens,
+        "json_mode": args.json_mode,
         "stream": False,
         "max_rounds": args.max_rounds,
         "max_repairs": args.max_repairs,
@@ -134,7 +146,7 @@ def build_config(args) -> dict:
         "api_retries": args.api_retries,
         "repetitions": args.repetitions,
         "max_attempts_per_unit": args.max_attempts,
-        "api_key_env": args.api_key_env,
+        "api_key_env": args.api_key_env or default_api_key_env(args.backend),
     }
 
     return {
@@ -159,9 +171,9 @@ def build_config(args) -> dict:
 def build_backend(
     settings: dict,
 ) -> ChatCompletionsBackend | ResponsesBackend:
-    api_key_env = settings.get("api_key_env", "OPENCODE_API_KEY")
+    api_key_env = settings.get("api_key_env") or "OPENCODE_API_KEY"
 
-    if settings["backend"] == "zen":
+    if settings["backend"] in PROVIDERS:
         api_key = os.environ.get(api_key_env, "").strip()
 
         if not api_key:
@@ -189,6 +201,9 @@ def build_backend(
         api_key=api_key,
         request_timeout=settings["request_timeout"],
         api_retries=settings["api_retries"],
+        extra_body=extra_body(settings.get("thinking")),
+        max_tokens=settings.get("max_tokens"),
+        json_mode=settings.get("json_mode", False),
     )
 
 
@@ -233,10 +248,13 @@ def validate_start_args(parser, args) -> None:
     if not args.model or not args.base_url:
         parser.error("--model and --base-url are required.")
 
-    if args.protocol == "chat" and args.temperature is None:
-        parser.error(
-            "--temperature is required with the chat protocol."
-        )
+    error = settings_error(
+        args.backend, args.protocol, args.temperature, args.thinking
+    ) or endpoint_error(args.backend, args.base_url) or request_options_error(
+        args.protocol, args.max_tokens, args.json_mode
+    )
+    if error is not None:
+        parser.error(error)
 
     if args.max_rounds < 1 or args.max_rounds > 10:
         parser.error("--max-rounds must be between 1 and 10.")
@@ -258,11 +276,6 @@ def validate_start_args(parser, args) -> None:
 
     if args.limit is not None and args.limit < 1:
         parser.error("--limit must be positive.")
-
-    if args.backend == "zen" and not args.base_url.startswith(
-        "https://opencode.ai"
-    ):
-        parser.error("Zen runs must use an https://opencode.ai base URL.")
 
 
 def execute_plan(
@@ -365,6 +378,9 @@ def execute_plan(
                 "model_requested": settings["model"],
                 "base_url": settings["base_url"],
                 "temperature": settings["temperature"],
+                "thinking": settings.get("thinking"),
+                "max_tokens": settings.get("max_tokens"),
+                "json_mode": settings.get("json_mode", False),
                 "stream": settings["stream"],
                 "max_rounds": settings["max_rounds"],
                 "max_repairs": settings["max_repairs"],
@@ -591,7 +607,7 @@ def main() -> None:
     start.add_argument("--dataset", type=Path, required=True)
     start.add_argument("--guess-list", type=Path, required=True)
     start.add_argument(
-        "--backend", choices=["ollama", "zen"], default="zen"
+        "--backend", choices=["ollama", *PROVIDERS], default="zen"
     )
     start.add_argument("--model", required=True)
     start.add_argument("--base-url", required=True)
@@ -601,13 +617,31 @@ def main() -> None:
         default="chat",
     )
     start.add_argument("--temperature", type=float, default=None)
+    start.add_argument(
+        "--thinking",
+        choices=THINKING_MODES,
+        help="DeepSeek reasoning mode; temperature only applies when disabled.",
+    )
+    start.add_argument(
+        "--max-tokens",
+        type=int,
+        help="Reply cap per call; a cut-off reply gets the repair re-ask.",
+    )
+    start.add_argument(
+        "--json-mode",
+        action="store_true",
+        help="Ask the provider for a well-formed JSON object (response_format).",
+    )
     start.add_argument("--max-rounds", type=int, default=3)
     start.add_argument("--max-repairs", type=int, default=1)
     start.add_argument("--request-timeout", type=float, default=300.0)
     start.add_argument("--api-retries", type=int, default=1)
     start.add_argument("--repetitions", type=int, default=3)
     start.add_argument("--max-attempts", type=int, default=2)
-    start.add_argument("--api-key-env", default="OPENCODE_API_KEY")
+    start.add_argument(
+        "--api-key-env",
+        help="Key variable (default: OPENCODE_API_KEY for zen, DEEPSEEK_API_KEY for deepseek).",
+    )
     start.add_argument("--limit", type=int)
     add_persona_arguments(start)
     add_run_controls(start)

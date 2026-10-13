@@ -40,7 +40,7 @@ Other entry points (all `uv run python -m multi_agent_testing.…`):
 - `experiment.human_data` — rebuilds `src/data/processed/wordle_human_clean.csv` and `quartiles.json`.
 - `experiment.plots f1 …` — figures. They are built only from processed/analysis files, never raw logs.
 
-Live runs need `OPENCODE_API_KEY` in the git-ignored `.env`. Never write it to source, configs or logs.
+Live runs need `DEEPSEEK_API_KEY` (pilot-02, `--backend deepseek`) or `OPENCODE_API_KEY` (`--backend zen`) in the git-ignored `.env`. Never write keys to source, configs or logs. Provider hosts, key names and DeepSeek's `--thinking` rule live in `agent/providers.py`.
 
 ## Architecture
 
@@ -48,9 +48,9 @@ Flow of one game: `play.play_wordle_game(lineup=…)` → `orchestra.debate.crea
 
 - **`agent/`** — `backend.py` defines the `ModelBackend` protocol plus `ScriptedBackend` (test double), chat-completions and responses backends for OpenAI-compatible endpoints (OpenCode Zen). `Completion` carries usage and the returned `model` (snapshot drift is tracked per call). `personas.py` is the persona registry (`PERSONAS`, `PRESETS`, `create_lineup`). `PersonaSpec` (`persona_spec.py`) holds each persona's instruction, advisor task and `action_rule`. Pilot-01 instruction text must stay byte-identical (`personas_test` checks it against a recorded pilot-01 run).
 - **`orchestra/`** — `flow/sequential.py` owns only topology: `gm_propose → advisor_<key> … → gm_review → next round or finalize`, one node per advisor in line-up order. Node behavior and routing are injected by `debate.py`, which parses JSON `AgentDecision`s (`decision.py`), validates actions against the guess list and each advisor's `action_rule`, does up to `max_repairs` repair re-asks, and stops on GM `stop` or `max_rounds`. `DebateState.suggestions` (`debate_context.py`) holds the current round's `{advisor_key: {action, reason}}` and is cleared after each GM review. `suggestion_log` keeps every round for statistics and is never sent to agents. Logged call `role` is `gm` or the advisor key.
-- **`games/wordle/`** — `engine.py` (rules and feedback), `dataset.py` (puzzle loading), `bridge.py` (renders public game state for prompts, validates actions). Agents only see public feedback. **Never put the answer word or human scores in any prompt.**
+- **`games/wordle/`** — `engine.py` (rules and feedback), `dataset.py` (puzzle loading), `bridge.py` (renders public game state for prompts, validates actions), `candidates.py` (`known_letters` keyboard-style summary shown to agents, plus candidate filtering for statistics; both use public feedback only). Agents only see public feedback. **Never put the answer word or human scores in any prompt.**
 - **`play.py`** — `turn_statistics` adds the per-turn GM/persona fields (`gm_retained`, `adopted_from`, `advisor_agreed`, `is_candidate`, `candidates_remaining`; plan Section 2.3). Candidates come from `games/wordle/candidates.py`, which uses public feedback only.
-- **`run_log.py`** — `RunLog` checkpoints every turn to a run JSON. `CallRecorder` records per-call tokens, latency, rejections and model.
+- **`run_log.py`** — `RunLog` checkpoints every turn to a run JSON. `CallRecorder` records per-call tokens (including cached prompt tokens), latency, rejections, model, `system_fingerprint` and the raw text of rejected replies. In `backend.py`, a reply cut off at `max_tokens` or empty raises `TruncatedReply`/`EmptyReply` (both `ValueError`), so it gets the repair re-ask instead of failing the game. `AgentDecision.stop` defaults to `false`.
 - **`experiment/`** — `runner.py` records config, code revision, source/data hashes and environment into `experiment_config.json`. It writes `runs/puzzle-<id>-rep<r>-attempt<a>.json`, `attempts.jsonl` and `run_summary.csv`, with retry attempts per unit. `manifest.py` holds the eligibility rules (`audit_record`) reused by `human_data.py`. `quartiles.py` does the rank-based D1–D4 split.
 
 ## Study conventions

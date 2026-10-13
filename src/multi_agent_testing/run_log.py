@@ -21,6 +21,11 @@ class CallRecord:
     total_tokens: int | None
     elapsed_seconds: float
     model: str | None = None
+    system_fingerprint: str | None = None
+    cached_prompt_tokens: int | None = None
+    # Raw reply of a rejected attempt, kept to diagnose runaway or malformed
+    # output. Accepted replies already appear in the transcript.
+    rejected_text: str | None = None
 
 
 class CallRecorder:
@@ -41,6 +46,9 @@ class CallRecorder:
         total_tokens: int | None,
         elapsed_seconds: float,
         model: str | None = None,
+        system_fingerprint: str | None = None,
+        cached_prompt_tokens: int | None = None,
+        rejected_text: str | None = None,
     ) -> None:
         self.records.append(
             CallRecord(
@@ -53,6 +61,9 @@ class CallRecorder:
                 total_tokens=total_tokens,
                 elapsed_seconds=elapsed_seconds,
                 model=model,
+                system_fingerprint=system_fingerprint,
+                cached_prompt_tokens=cached_prompt_tokens,
+                rejected_text=rejected_text,
             )
         )
 
@@ -97,7 +108,17 @@ class CallRecorder:
                 getattr(record, attribute) for record in with_usage
             )
 
+        cached = [
+            record.cached_prompt_tokens
+            for record in self.records
+            if record.cached_prompt_tokens is not None
+        ]
+
         return {
+            # Unknown unless every call reported its cache hits.
+            "cached_prompt_tokens": (
+                sum(cached) if len(cached) == len(self.records) else None
+            ),
             "prompt_tokens": total("prompt_tokens"),
             "completion_tokens": total("completion_tokens"),
             "total_tokens": total("total_tokens"),

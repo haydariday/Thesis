@@ -20,6 +20,16 @@ WINNING_BACKEND = ScriptedBackend(
     response='{"action": "CIGAR", "reason": "scripted", "stop": false}'
 )
 
+OLLAMA = (
+    "--backend", "ollama",
+    "--base-url", "http://localhost:11434/v1",
+    "--temperature", "0.2",
+)
+DEEPSEEK = (
+    "--backend", "deepseek",
+    "--base-url", "https://api.deepseek.com",
+)
+
 
 def run_main(*argv: str) -> str:
     output = io.StringIO()
@@ -45,17 +55,15 @@ class RunnerPersonaTest(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def start(self, *persona_args: str) -> str:
+    def start(self, *persona_args: str, backend: tuple[str, ...] = OLLAMA) -> str:
         return run_main(
             "start",
             "--experiment-dir", str(self.experiment),
             "--manifest", str(self.manifest),
             "--dataset", str(DATASET),
             "--guess-list", str(GUESSES),
-            "--backend", "ollama",
             "--model", "scripted",
-            "--base-url", "http://localhost:11434/v1",
-            "--temperature", "0.2",
+            *backend,
             "--max-rounds", "1",
             "--repetitions", "1",
             *persona_args,
@@ -113,6 +121,37 @@ class RunnerPersonaTest(unittest.TestCase):
         for flags in cases:
             with self.subTest(flags=flags), self.assertRaises(SystemExit) as raised:
                 self.start(*flags)
+            self.assertEqual(raised.exception.code, 2)
+            self.assertFalse(self.experiment.exists())
+
+
+    def test_deepseek_records_thinking_mode_and_key_name(self):
+        self.start(
+            "--persona-preset", "pilot-02",
+            backend=(
+                *DEEPSEEK, "--thinking", "disabled", "--temperature", "0.2",
+                "--max-tokens", "1024", "--json-mode",
+            ),
+        )
+
+        settings = self.config()["settings"]
+        self.assertEqual(settings["max_tokens"], 1024)
+        self.assertTrue(settings["json_mode"])
+        self.assertEqual(settings["thinking"], "disabled")
+        self.assertEqual(settings["temperature"], 0.2)
+        self.assertEqual(settings["api_key_env"], "DEEPSEEK_API_KEY")
+        run = json.loads((self.experiment / "runs" / "puzzle-0-rep1-attempt1.json").read_text(encoding="utf-8"))
+        self.assertEqual(run["metadata"]["thinking"], "disabled")
+
+    def test_deepseek_rejects_settings_that_would_mislead(self):
+        cases = [
+            DEEPSEEK + ("--temperature", "0.2"),  # mode not chosen
+            DEEPSEEK + ("--thinking", "enabled", "--temperature", "0.2"),  # ignored temperature
+            ("--backend", "deepseek", "--base-url", "https://opencode.ai/zen/v1/", "--thinking", "disabled", "--temperature", "0.2"),
+        ]
+        for backend in cases:
+            with self.subTest(backend=backend), self.assertRaises(SystemExit) as raised:
+                self.start("--persona-preset", "pilot-02", backend=backend)
             self.assertEqual(raised.exception.code, 2)
             self.assertFalse(self.experiment.exists())
 
