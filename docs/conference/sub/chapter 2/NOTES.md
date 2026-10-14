@@ -8,7 +8,8 @@ Same layout as Chapter 1: one folder per version, frozen once sent to a supervis
 
 | Version | Date | Status | Notes |
 |---|---|---|---|
-| v1 | 2026-10-15 | working | First draft, aligned with the proposal's Reference Tracing (1.1 Difficulty and Its Impacts, 1.2 Automatic Playtesting) and the supervisors' comments. 23 references from the pool in `../chapter 1/number_refs.py`: 14 of Chapter 1's, the 7 spare entries, plus the proposal's Guzsvinecz and Klepek (Dark Souls). |
+| v1 | 2026-10-15 | frozen | First draft, aligned with the proposal's Reference Tracing (1.1 Difficulty and Its Impacts, 1.2 Automatic Playtesting) and the supervisors' comments. 23 references from the pool in `../chapter 1/number_refs.py`: 14 of Chapter 1's, the 7 spare entries, plus the proposal's Guzsvinecz and Klepek (Dark Souls). |
+| v2 | 2026-10-15 | working | v1 paraphrased into the proposal's voice ("classical yet highly powerful", "also noteworthy", "LLMs can indeed be employed", "there are two types of difficulty", "operationalized through the guess count", "To accommodate this gap"). Same structure, content and 24 references; first person "we" for the debate choice and positioning. |
 
 ## Build
 

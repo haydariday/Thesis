@@ -7,11 +7,13 @@
 \usepackage{setspace}
 \onehalfspacing
 \usepackage{csquotes}
+\usepackage{microtype}
 \usepackage[style=ieee,backend=biber]{biblatex}
 \addbibresource{references.bib}
 \usepackage{titlesec}
 \titleformat{\chapter}[display]{\normalfont\large\bfseries\centering}{CHAPTER \thechapter}{0.3em}{\MakeUppercase}
 \titlespacing*{\chapter}{0pt}{0pt}{1.5em}
+\usepackage{xurl}
 \usepackage[hidelinks]{hyperref}
 \providecommand{\tightlist}{\setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
 
@@ -20,8 +22,13 @@
 \date{October 2026}
 
 \begin{document}
+\hypersetup{pageanchor=false}
 \maketitle
+\hypersetup{pageanchor=true}
+\pagenumbering{roman}
 \tableofcontents
+\clearpage
+\pagenumbering{arabic}
 
 \chapter{Introduction}\label{introduction}
 
@@ -83,16 +90,18 @@ later in the research method.
 We employ Wordle as the case study for three reasons. First, its games
 are short with deterministic feedback. Second, it was studied by Xiao
 and Yang \autocite{xiao2025}, so our results can be related to prior
-single-agent work. Third, Wordle has public per-puzzle human results
-\autocite{engagingdata} that express the difficulty of each puzzle as
-the average number of guesses human players needed. The playtester plays
-a sample of historical puzzles several times each, after which we
-measure how much its outcomes vary across repeated runs of the same
-puzzle. We also measure how well its average guess counts agree with the
-human averages, both as continuous scores and as ordered difficulty
-categories. In addition, we describe how the playstyle personas behave
-during the debate, since a persona-based playtester is only meaningful
-when its personas actually shape the guesses.
+single-agent work. Third, Wordle has public per-puzzle human
+results\footnote{Engaging Data, ``Wordle Guess Distribution,''
+  \url{https://engaging-data.com/wordle-guess-distribution/}.} that
+express the difficulty of each puzzle as the average number of guesses
+human players needed. The playtester plays a sample of historical
+puzzles several times each, after which we measure how much its outcomes
+vary across repeated runs of the same puzzle. We also measure how well
+its average guess counts agree with the human averages, both as
+continuous scores and as ordered difficulty categories. In addition, we
+describe how the playstyle personas behave during the debate, since a
+persona-based playtester is only meaningful when its personas actually
+shape the guesses.
 
 \section{Problem Statement}\label{problem-statement}
 
@@ -170,15 +179,14 @@ The objectives of this research are fourfold:
 \section{Scope and Limitations}\label{scope-and-limitations}
 
 This research focuses on Wordle as a single case study. The playtester
-plays past Wordle puzzles for which public human results are available
-\autocite{engagingdata}, so that every outcome has a human counterpart
-to compare with. Game difficulty is limited to objective difficulty,
-which is measured from how many guesses the playtester needs to solve
-each puzzle \autocite{constant2017}. The playtester is evaluated as a
-whole system, judged by how consistent its outcomes are and how closely
-they agree with human players. The behavior of the personas is described
-from the debate records rather than tested by removing or swapping
-personas.
+plays past Wordle puzzles for which public human results are available,
+so that every outcome has a human counterpart to compare with. Game
+difficulty is limited to objective difficulty, which is measured from
+how many guesses the playtester needs to solve each puzzle
+\autocite{constant2017}. The playtester is evaluated as a whole system,
+judged by how consistent its outcomes are and how closely they agree
+with human players. The behavior of the personas is described from the
+debate records rather than tested by removing or swapping personas.
 
 This research also has several limitations. It does not compare the
 debate playtester with a single-agent playtester
@@ -214,199 +222,206 @@ to several agents with different playstyles \autocite{sreedhar2025}.
 
 \section{Automated Game Playtesting}\label{automated-game-playtesting}
 
-Playtesting lets players try a game under development so that designers
-can see how the game is actually experienced. It reveals faults in the
-game as well as problems in its design, such as levels that turn out
+Playtesting is conducted to observe how a game under development is
+experienced by its players. Through playtesting, designers can find
+faults in the game as well as design problems, such as levels that are
 harder than intended \autocite{weber2020}. However, manual playtesting
-depends on many human testers over many sessions, which makes it
-resource-intensive to repeat after every design change
-\autocite{prasetya2026,zhao2025}. Automated playtesting reduces this
-cost by letting software agents play the game while recording what
-happens.
+is a resource-intensive and rigorous process, since it needs many human
+testers over many sessions after every design change
+\autocite{prasetya2026,zhao2025}. Automatic playtesting addresses this
+cost by letting software agents play the game while recording each
+playthrough.
 
-The earliest automated playtesters are hand-crafted. Prasetya et al.
-\autocite{prasetya2026} use the APLib framework to build highly
-controlled test agents through goal structures and domain-specific
-languages. However, building such agents requires significant
-programming effort with a steep learning curve. Francillette et al.
-\autocite{francillette2025} propose a mathematical model that evaluates
-the difficulty of platformer games automatically. Their model is
-deterministic and needs no sophisticated AI, yet it is limited to the
-platformer genre while demanding a complex setup.
+Various methods have been explored for automatic playtesting, ranging
+from hand-crafted agents to deep learning. Prasetya et al.
+\autocite{prasetya2026} demonstrate a more ``classical'' yet highly
+powerful approach with the APLib framework. Through goal structures and
+domain-specific languages, they can create highly controlled test
+agents, although this requires significant programming effort with a
+steep learning curve. The mathematical model of Francillette et al.
+\autocite{francillette2025} for platformer games is also noteworthy.
+This model is highly deterministic and requires no sophisticated AI, yet
+it is limited to the platformer genre while demanding a complex setup.
 
-Learning-based playtesters remove part of this manual work. Gudmundsson
+Learning-based approaches reduce part of this manual work. Gudmundsson
 et al. \autocite{gudmundsson2018} train a deep neural network on human
-moves in a puzzle game, after which it plays new levels to predict their
-difficulty for players. Such an agent needs a large set of human play
-data before it can be used. Deep reinforcement learning agents learn
-from their own play instead, yet they need large training resources.
-Even when these agents outperform human players, they lack the natural
-behavioral patterns of human play \autocite{delfosse2025}. Holmgård et
-al. \autocite{holmgard2019} narrow this gap through procedural personas,
-which are agents tuned to represent different playstyles. Their personas
-show that a playtester can cover more than one way of playing, although
-each persona still relies on heuristics evolved for the specific game.
+moves in a puzzle game, after which the network predicts how hard new
+levels are for players. However, such an agent can only be used once a
+large set of human play data is available. Deep reinforcement learning
+agents learn from their own play instead, yet they demand substantial
+training resources. While these agents may outperform human players,
+they lack the natural behavioral patterns of actual human gameplay
+\autocite{delfosse2025}. Holmgård et al. \autocite{holmgard2019} narrow
+this gap with procedural personas, which are agents tuned to represent
+different playstyles. Their personas show that one playtester can cover
+several ways of playing, although each persona still relies on
+heuristics evolved for the specific game.
 
-LLM-based playtesters are the most recent group. LLM agents receive the
-rules and the current game state as text, so they can play a new game
-without game-specific training \autocite{xiao2025}. Zhao and Tang
-\autocite{zhao2025} focus on match-3 games, where they address the
-inability of an LLM to ``see'' the game by converting the board into
-numerical representations. Their playtester reaches strong code coverage
-while detecting bugs effectively. Bateni and Whitehead
-\autocite{bateni2024} show that LLM agents in Slay the Spire can plan
-over a long horizon without specialized training, which lets them adapt
-to changes in the game rules. Xiao and Yang \autocite{xiao2025} go
-further by using LLM agents to measure the difficulty of Wordle and Slay
-the Spire. Their agents play worse than humans, yet the difficulty
-patterns the agents experience resemble those of human players. However,
-a single LLM loses too often in most games, so the authors need a
-handicap system to prevent this. These studies make LLMs a promising
+The emergence of LLMs provides an alternative approach for playtesting.
+LLM agents receive the game rules and the current game state as text, so
+they can play a new game without game-specific training
+\autocite{xiao2025}. Zhao and Tang \autocite{zhao2025} adopt this
+approach for match-3 games. They successfully address the inability of
+an LLM to ``see'' the game by converting the game board into numerical
+representations. As a result, their playtester achieves strong code
+coverage with effective bug detection. Bateni and Whitehead
+\autocite{bateni2024} show that LLM agents in Slay the Spire exhibit
+long-term planning without specialized training, which lets them adapt
+to changes in the game rules. Within difficulty measurement, Xiao and
+Yang \autocite{xiao2025} demonstrate that LLMs can indeed be employed to
+measure the difficulty of Wordle and Slay the Spire. Although their
+gameplay is inferior to that of human players, the difficulty patterns
+experienced by the LLMs resemble those perceived by humans.
+Nevertheless, a single LLM loses too often in most games, which forces
+the authors to add a handicap system. Thus, LLMs offer a promising
 option for indie game developers, who rarely have the data or budget
-that learning-based methods need.
+that learning-based approaches require.
 
 \section{Game Difficulty and Behavioral Performance
 Measures}\label{game-difficulty-and-behavioral-performance-measures}
 
-Difficulty is closely linked to whether a game is fun. Players may feel
-a sense of accomplishment when they overcome challenges, particularly
-when those challenges are significant \autocite{karavidas2022}. For
-example, Dark Souls was regarded as one of the hardest games of its
-time, yet the higher the risk a player takes, the greater the reward
-\autocite{guzsvinecz2024}. Its difficulty drew strong player engagement,
-which later gave rise to a new sub-genre known as ``souls-like''
-\autocite{klepek2017}. That is why measuring difficulty for the intended
-player is an important part of game design.
+A ``fun'' game can be linked to the design of its difficulty. Players
+may feel a sense of accomplishment when overcoming challenges,
+particularly when those challenges are significant
+\autocite{karavidas2022}. For example, Dark Souls was dubbed the hardest
+game of its time, yet the higher the risk the player must take, the
+greater the reward \autocite{guzsvinecz2024}. The game garnered
+significant player engagement, which later gave rise to a new sub-genre
+known as ``souls-like'' \autocite{klepek2017}. Given the importance of
+difficulty, measuring it for the intended player is a key part of game
+design.
 
-According to Constant et al. \autocite{constant2017}, difficulty can be
-viewed from two sides. Subjective difficulty is how challenging players
-perceive the game to be, which is hard to measure directly because it is
-tied to personal skill, stress and emotion. Objective difficulty is the
-measurable part of difficulty that comes from how players actually
-perform, independent of their perception. This research is concerned
-with objective difficulty only, because an automated playtester produces
-play outcomes rather than perceptions of the game.
+According to Constant et al. \autocite{constant2017}, there are two
+types of difficulty. First, subjective difficulty is how challenging
+players perceive the game to be, which cannot be measured explicitly
+because it is tied to personal skill, stress and emotion. Second,
+objective difficulty is the quantifiable aspect of a game that
+determines how challenging it is, independent of player perception. This
+research focuses on objective difficulty only, since an automated
+playtester produces play outcomes rather than perceptions of the game.
 
 Objective difficulty is measured through behavioral performance
-measures, which are records of what players do and achieve while
-playing. Typical measures include whether a challenge is completed, how
-many attempts it takes and how long it takes. Dynamic difficulty
-adjustment systems use the same kind of measures to judge the skill of a
-player during play \autocite{weber2020,romero2023}. Playtesting studies
-use them to compare agents with humans, such as the level success rate
-of an agent against the pass rate of human players
-\autocite{gudmundsson2018}.
+measures, which record what players do and achieve while playing. Such
+measures include whether a challenge is completed, how many attempts it
+takes and how long it takes. Dynamic difficulty adjustment systems rely
+on these measures to estimate the skill of a player during play
+\autocite{weber2020,romero2023}. Playtesting studies use them to compare
+agents with humans, for instance the level success rate of an agent
+against the pass rate of human players \autocite{gudmundsson2018}.
 
-In Wordle, the natural performance measure is the number of guesses a
-player needs to find the answer. Fewer guesses indicate an easier
-puzzle, while more guesses or a lost game indicate a harder one.
-Engaging Data \autocite{engagingdata} publishes the guess distribution
-of real players for each past puzzle, from which the average number of
-guesses per puzzle can be computed. For example, a puzzle that players
-solve in 3.2 guesses on average is objectively easier than one that
-takes 5.8 guesses. However, the dataset does not provide further details
-such as the demographics of the players. This average serves as the
-human performance baseline in this research, as it does in the Wordle
-comparison of Xiao and Yang \autocite{xiao2025}.
+In Wordle, the difficulty is operationalized through the guess count,
+which is how many attempts a player requires to identify the target
+word. Lower guess counts indicate easier words, while higher counts or a
+lost game indicate harder ones. Engaging Data\footnote{Engaging Data,
+  ``Wordle Guess Distribution,''
+  \url{https://engaging-data.com/wordle-guess-distribution/}.} provides
+the guess distribution of real players for each past puzzle, from which
+the average number of guesses per puzzle can be computed. For example, a
+word with an average of 3.2 guesses is objectively easier than one with
+5.8 guesses. However, the dataset does not provide additional details
+such as demographic information about the players. This average serves
+as the human performance baseline in this research, as it does in the
+Wordle comparison of Xiao and Yang \autocite{xiao2025}.
 
-Comparing a playtester with humans raises two separate questions. The
-first is whether the playtester gives similar outcomes when it plays the
-same puzzle again, since a single run of an LLM agent may not represent
-its typical play. The variation of outcomes across repeated runs, such
-as their standard deviation, shows how reliable the playtester is. The
-second question is whether its outcomes rank and group puzzles the same
-way human results do. Agreement can be checked on continuous scores,
+Comparing a playtester with human players raises two separate questions.
+The first is whether the playtester gives similar outcomes on the same
+puzzle again, since a single run of an LLM agent may not represent its
+typical play. This reliability can be assessed through outcome variance,
+such as the standard deviation of repeated playthroughs. The second
+question is whether the playtester ranks and groups puzzles in the same
+way as human results do. Agreement can be checked on continuous scores,
 such as the correlation between average guess counts, or on ordered
-categories that range from easy to hard. Since the human baselines
-describe the player population rather than individual players, these
-comparisons are made per puzzle over a random sample of puzzles.
+categories from easy to hard. Since the human baselines describe the
+player population rather than individual players, both comparisons are
+made per puzzle over a random sample of puzzles.
 
 \section{Related Work}\label{related-work}
 
-LLM agents have been shown to play a wide range of games. ChessGPT
-combines policy learning with language modeling for chess
+Recent studies demonstrate that LLM agents can play diverse games.
+ChessGPT bridges policy learning and language modeling for chess
 \autocite{feng2023}, while PokeLLMon reaches human-parity performance in
 Pokémon battles \autocite{hu2024}. Voyager acts as an embodied agent in
 Minecraft that keeps learning new skills as it explores
-\autocite{wang2023}. These agents aim to play well rather than to play
-like humans, which is a different goal from playtesting.
+\autocite{wang2023}. However, these agents aim to play well rather than
+to play like humans, which differs from the goal of playtesting.
 
-For playtesting, the key question is whether the results of an agent
+For playtesting, the main concern is whether the results of an agent
 reflect human players. The LLM playtesters reviewed above play alone
-with a single playstyle \autocite{zhao2025,xiao2025}, so the variety of
-human play is not represented. Sreedhar and Chilton
+with a single playstyle \autocite{zhao2025,xiao2025}, so they do not
+account for the diversity of player playstyles. Sreedhar and Chilton
 \autocite{sreedhar2025} show in a strategic game that multi-agent
 systems replicate human behavior more closely than single LLMs do.
 Before LLMs, Holmgård et al. \autocite{holmgard2019} already represented
-different players through personas with different playstyles. More
-recently, MIMIC \autocite{chen2025} gives an LLM game tester different
-personality traits, which leads to more diverse solutions with higher
-test coverage. Thus, a playtester that captures this variety needs to
-move beyond a single LLM agent.
+different players through procedural personas. More recently, MIMIC
+\autocite{chen2025} equips an LLM game tester with different personality
+traits, which leads to more diverse solutions with higher test coverage.
+Thus, capturing the diversity of players requires moving beyond a single
+LLM agent.
 
-Multi-agent debate is one way to combine several LLM agents into one
-decision. In a debate, agents propose answers before reading the
-reasoning of the others, after which they revise their answers over
-several rounds until they agree \autocite{du2024}. Du et al.
-\autocite{du2024} show that this process improves factual accuracy and
-reasoning compared with a single agent. Liang et al.
+Multi-agent debate is one way to combine several LLM agents into a
+single decision. In a debate, agents propose their own answers before
+reading the reasoning of the others, after which they revise their
+answers over several rounds until they agree \autocite{du2024}. Du et
+al. \autocite{du2024} show that this process improves factual accuracy
+and reasoning compared with a single agent. Liang et al.
 \autocite{liang2024} let agents express arguments in a state of ``tit
-for tat'', where each agent responds directly to the position of the
-previous one. A managing agent oversees this exchange to reach the final
-decision. ChatEval \autocite{chan2024} gives agents different roles in a
-debate for evaluating text, while finding that the diversity of these
-roles is important for its results. However, Smit et al.
-\autocite{smit2024} find that debate does not reliably outperform other
-prompting strategies, as its results depend strongly on how the debate
-is set up. Personas also do not always hold in a debate, since agents
-may conform to their peers or drift away from their assigned views
-\autocite{baltaji2024}.
+for tat'', where each agent directly responds to the position of the
+previous agent. Meanwhile, a managing agent oversees the exchange to
+obtain the final decision. ChatEval \autocite{chan2024} assigns
+different roles to agents in a debate for evaluating text, while finding
+that the diversity of these roles is important for its results. However,
+Smit et al. \autocite{smit2024} find that debate does not reliably
+outperform other prompting strategies, as its results depend strongly on
+how the debate is set up. Personas also do not always hold in a debate,
+since agents may conform to their peers or drift away from their
+assigned views \autocite{baltaji2024}.
 
-This research follows the debate structure of Liang et al.
-\autocite{liang2024} for two reasons. First, its managing agent gives a
-single point where the arguments end in one action, which a playtester
-needs because every turn must produce a playable move. Second, agents
-that argue from different positions keep the debate from collapsing into
-immediate agreement, which matches the role of playstyle personas
-\autocite{chan2024}. Since its benefit depends on the setup
-\autocite{smit2024}, this research evaluates the resulting playtester
-directly rather than assuming that debate improves it.
+We adopt the debate structure of Liang et al. \autocite{liang2024} for
+two reasons. First, its managing agent provides a single point where the
+arguments end in one action, which a playtester needs because every turn
+must produce a playable move. Second, agents that argue from different
+positions keep the debate from reaching agreement immediately, which
+matches the role of playstyle personas \autocite{chan2024}. Since the
+benefit of debate depends on its setup \autocite{smit2024}, we evaluate
+the resulting playtester directly rather than assuming that debate
+improves it.
 
 \section{Research Gap and
 Positioning}\label{research-gap-and-positioning}
 
-The reviewed work shows a trade-off between generality and human
-likeness. Hand-crafted playtesters are precise but must be rebuilt for
-each game \autocite{prasetya2026,francillette2025}. Learning-based
-playtesters need either large sets of human play data or large training
-resources \autocite{gudmundsson2018,delfosse2025}. LLM playtesters can
-play a new game from its rules alone, while the difficulty they
-experience can follow that of human players \autocite{xiao2025}.
-However, existing LLM playtesters use a single agent with one playstyle,
-even though personas have long been used to represent different players
+The reviewed studies reveal a trade-off between generality and human
+likeness. Hand-crafted playtesters are highly controlled but must be
+rebuilt for each game \autocite{prasetya2026,francillette2025}.
+Learning-based playtesters require either large sets of human play data
+or substantial training resources
+\autocite{gudmundsson2018,delfosse2025}. LLM playtesters can play a new
+game from its rules alone, while the difficulty they experience can
+follow that of human players \autocite{xiao2025}. However, existing LLM
+playtesters rely on a single agent with one playstyle, even though
+personas have long been used to represent different players
 \autocite{holmgard2019}.
 
-Multi-agent debate could reconcile these different playstyles into one
-consensus action, yet automated consensus frameworks remain absent from
-current difficulty measurement methods. Three questions therefore remain
-open. First, LLM outputs vary between calls, so it is unclear whether a
-playtester built from several debating agents gives consistent outcomes
-across repeated runs. Even Xiao and Yang \autocite{xiao2025} play each
-Wordle puzzle 20 times yet report only the average outcome. Second, it
-is unclear whether the difficulty found by such a playtester still
-agrees with human performance baselines. Third, it is unclear whether
-the personas keep their playstyles during the debate, since debating
-agents may conform to their peers \autocite{baltaji2024}. To the best of
-our knowledge, no prior study has applied persona-based multi-agent
-debate to measure game difficulty.
+While multi-agent debate could reconcile these heterogeneous playstyles
+into one consensus action, automated consensus frameworks remain absent
+from current difficulty measurement methods. Thus, three questions
+remain open. First, LLM outputs vary between calls, so it is unclear
+whether a playtester built from several debating agents produces
+consistent outcomes across repeated runs. Even Xiao and Yang
+\autocite{xiao2025} play each Wordle puzzle 20 times yet report only the
+average outcome. Second, it is unclear whether the difficulty found by
+such a playtester still agrees with human performance baselines. Third,
+it is unclear whether the personas keep their playstyles during the
+debate, since debating agents may conform to their peers
+\autocite{baltaji2024}. To the best of our knowledge, no prior study has
+applied persona-based multi-agent debate to measure game difficulty.
 
-This research is positioned where these lines of work meet. It takes
-playstyle personas from persona-based playtesting
+To accommodate this gap, our research is positioned where these lines of
+work meet. We take playstyle personas from persona-based playtesting
 \autocite{holmgard2019} while taking the consensus process from
 multi-agent debate \autocite{liang2024}. Both are then applied to the
 LLM difficulty measurement of Xiao and Yang \autocite{xiao2025}, using
-Wordle and its public human results \autocite{engagingdata}. Unlike
-studies that compare multi-agent systems with a single agent
+Wordle and its public human results. Unlike studies that compare
+multi-agent systems with a single agent
 \autocite{sreedhar2025,smit2024}, this research validates the playtester
 as a system. It does so through the consistency of its outcomes (RQ1),
 their agreement with human difficulty (RQ2) and the behavior of its

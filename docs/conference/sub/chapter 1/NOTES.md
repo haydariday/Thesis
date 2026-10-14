@@ -47,7 +47,7 @@ Each version lives in its own folder (`v1/`, `v2/`, …) with `chapter-1.src.md`
 ## TODO: verify before submitting
 
 1. [8] Delfosse et al.: add the arXiv ID.
-2. [15] Engaging Data: check the page title and add the access date.
+2. Engaging Data: from v2 on it is a footnote, not a bibliography entry (a website, not a publication). Check the page title and add the access date to the footnote.
 3. The scope change (thesis scope narrowed to the conference scope) still needs the supervisors' approval.
 
 ## Deferred to the method chapter
