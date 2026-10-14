@@ -25,6 +25,10 @@ REFS = {
     "holmgard2019": 'C. Holmgård, M. C. Green, A. Liapis, and J. Togelius, "Automated playtesting with procedural personas through MCTS with evolved heuristics," *IEEE Trans. Games*, vol. 11, no. 4, pp. 352–362, Dec. 2019.',
     "chan2024": 'C.-M. Chan *et al.*, "ChatEval: Towards better LLM-based evaluators through multi-agent debate," in *Proc. 12th Int. Conf. Learning Representations (ICLR)*, 2024.',
     "engagingdata": 'Engaging Data, "Wordle guess distribution." [Online]. Available: https://engaging-data.com/wordle-guess-distribution/ (accessed [TODO: date]).',
+    "guzsvinecz2024": 'T. Guzsvinecz and J. Szűcs, "Game theory and strategic decision-making in the Dark Souls games," in *Game Theory – Computational Aspects and Applications*, T. Guzsvinecz and J. Szűcs, Eds. London, U.K.: IntechOpen, 2024, doi: 10.5772/intechopen.1008456.',
+    "klepek2017": 'P. Klepek, "\'Nioh\' suggests that \'Dark Souls\' actually invented a new genre," *Vice*, Feb. 10, 2017. [Online]. Available: https://www.vice.com/en/article/nioh-suggests-that-dark-souls-actually-invented-a-new-genre/',
+    "baltaji2024": 'R. Baltaji, B. Hemmatian, and L. R. Varshney, "Persona inconstancy in multi-agent LLM collaboration: Conformity, confabulation, and impersonation," in *Proc. 2nd Workshop on Cross-Cultural Considerations in NLP (C3NLP)*, 2024, *arXiv:2405.03862*.',
+    "chen2025": 'Y. Chen, S. Habchi, and L. Wei, "MIMIC: Integrating diverse personality traits for better game testing using large language model," in *Proc. 40th IEEE/ACM Int. Conf. Automated Software Engineering (ASE)*, 2025, *arXiv:2510.01635*.',
     "stsdata": '[TODO: cite the source of the Slay the Spire run dataset released by Mega Crit (more than 75 million runs).]',
 }
 

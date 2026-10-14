@@ -2,7 +2,7 @@
 
 ## 1.1 Background
 
-"Is the game hard enough for the intended player?" is one of the key questions that game designers keep asking during development. A game that is too hard drives players away while one that is too easy soon becomes stale, both of which risk losing players and receiving a negative reception [@weber2020; @karavidas2022]. That is why difficulty can be an indicator of player engagement and experience [@romero2023; @alvarado2021]. Designers measure this difficulty through playtesting. However, manual playtesting is resource-intensive since it needs many testers over many sessions and has to be repeated after every significant design change [@weber2020; @prasetya2026; @zhao2025]. For indie game developers with limited budgets, this cost is often prohibitive. Thus, they need a cheaper way to obtain difficulty data that still reflects human players.
+"Is the game hard enough for the intended player?" is one of the key questions that game designers keep asking during development [@weber2020]. A game that is too hard drives players away while one that is too easy soon becomes stale, both of which risk losing players and receiving a negative reception [@karavidas2022]. That is why difficulty can be an indicator of player engagement and experience [@romero2023; @alvarado2021]. Designers measure this difficulty through playtesting. However, manual playtesting is resource-intensive since it needs many testers over many sessions and has to be repeated after every significant design change [@weber2020; @prasetya2026; @zhao2025]. For indie game developers with limited budgets, this cost is often prohibitive. Thus, they need a cheaper way to obtain difficulty data that still reflects human players.
 
 Automatic playtesting has gained popularity among industry and academic researchers alike. The methods explored so far fall into two groups. Hand-crafted methods, such as programmed test agents [@prasetya2026] and mathematical difficulty models [@francillette2025], require heavy engineering effort for each game or genre. Learning-based methods such as deep reinforcement learning need large training resources while also tending to play in ways that humans would not [@delfosse2025]. Large Language Models (LLMs) provide an alternative, as LLM agents can play games ranging from chess [@feng2023] to Pokémon battles [@hu2024] and Minecraft [@wang2023] using only a text description of the rules. Xiao and Yang [@xiao2025] show that the difficulty LLM agents experience in Wordle and Slay the Spire follows that of human players, even though the agents play worse. However, these LLM playtesters rely on a single agent that plays with only one playstyle. Human players are more diverse, as some take risks while others play safely. The difficulty that matters to a designer is the one experienced by this diverse population. Moreover, single LLMs replicate human strategic behavior less closely than multi-agent systems do [@sreedhar2025]. Thus, it remains unclear whether an LLM playtester can produce difficulty data that is both consistent and aligned with human players once multiple playstyles are considered.
 
@@ -19,18 +19,13 @@ The background shows that game designers still lack an automated playtester whos
 
 Answering both questions shows whether the playtester can be trusted as a source of difficulty data for Wordle, which is the first step toward solving the general problem.
 
-## 1.3 Objective and Hypotheses
+## 1.3 Objective
 
 The objectives of this research are threefold:
 
 1. To implement a persona-based multi-agent LLM debate playtester for Wordle, in which agents with different playstyle personas reach consensus on each guess while every playthrough is logged as difficulty data.
 2. To measure the consistency of the playtester's outcomes across repeated runs of the same puzzles.
 3. To measure the agreement between the playtester's difficulty estimates and human performance baselines, using both average guess scores and difficulty categories.
-
-The hypotheses based on the RQs are:
-
-- **H1.** The playtester produces consistent outcomes across repeated runs, with low variation in guess scores within each puzzle.
-- **H2.** The playtester's average guess scores correlate positively with human average guess scores, while it assigns puzzles to the same difficulty categories as humans more often than a majority-class baseline.
 
 ## References
 
