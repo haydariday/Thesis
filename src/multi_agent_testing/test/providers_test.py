@@ -6,6 +6,7 @@ from ..agent.providers import (
     endpoint_error,
     extra_body,
     peak_wait_seconds,
+    reasoning_effort_error,
     settings_error,
 )
 
@@ -87,6 +88,15 @@ class ProviderDefaultsTests(unittest.TestCase):
     def test_extra_body(self):
         self.assertIsNone(extra_body(None))
         self.assertEqual(extra_body("disabled"), {"thinking": {"type": "disabled"}})
+        self.assertEqual(
+            extra_body("enabled", "low"),
+            {"thinking": {"type": "enabled"}, "reasoning_effort": "low"},
+        )
+
+    def test_reasoning_effort_needs_thinking(self):
+        self.assertIsNone(reasoning_effort_error("enabled", "low"))
+        self.assertIsNone(reasoning_effort_error("disabled", None))
+        self.assertIsNotNone(reasoning_effort_error("disabled", "low"))
 
 
 if __name__ == "__main__":

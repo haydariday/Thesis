@@ -153,6 +153,8 @@ class RunnerPersonaTest(unittest.TestCase):
         )
 
         settings = self.config()["settings"]
+        self.assertEqual(settings["max_guesses"], 6)
+        self.assertIsNone(settings["reasoning_effort"])
         self.assertEqual(settings["max_tokens"], 1024)
         self.assertTrue(settings["json_mode"])
         self.assertEqual(settings["thinking"], "disabled")
@@ -173,6 +175,20 @@ class RunnerPersonaTest(unittest.TestCase):
             )
         return sleeps
 
+    def test_thinking_variant_with_handicap_is_recorded(self):
+        self.start(
+            "--persona-preset", "pilot-02", "--max-guesses", "12",
+            backend=(*DEEPSEEK, "--thinking", "enabled", "--reasoning-effort", "low"),
+        )
+
+        settings = self.config()["settings"]
+        self.assertEqual((settings["thinking"], settings["reasoning_effort"]), ("enabled", "low"))
+        self.assertIsNone(settings["temperature"])
+        self.assertEqual(settings["max_guesses"], 12)
+        run = json.loads((self.experiment / "runs" / "puzzle-0-rep1-attempt1.json").read_text(encoding="utf-8"))
+        self.assertEqual(run["metadata"]["max_guesses"], 12)
+        self.assertEqual(run["turns"][0]["observation_before"]["attempts_remaining"], 12)
+
     def test_deepseek_pauses_during_peak_hours(self):
         tuesday_2am = datetime(2026, 10, 13, 2, 0, tzinfo=UTC)
 
@@ -188,6 +204,74 @@ class RunnerPersonaTest(unittest.TestCase):
     def test_off_peak_does_not_pause(self):
         self.assertEqual(self.start_deepseek_at(datetime(2026, 10, 13, 12, 0, tzinfo=UTC)), [])
 
+    def ledger(self) -> list[dict]:
+        lines = (self.experiment / "attempts.jsonl").read_text(encoding="utf-8").splitlines()
+        return [json.loads(line) for line in lines]
+
+    def start_reps(self, repetitions: int, *extra: str) -> None:
+        run_main(
+            "start",
+            "--experiment-dir", str(self.experiment),
+            "--manifest", str(self.manifest),
+            "--dataset", str(DATASET),
+            "--guess-list", str(GUESSES),
+            "--model", "scripted",
+            *OLLAMA,
+            "--max-rounds", "1",
+            "--repetitions", str(repetitions),
+            "--persona-preset", "pilot-02",
+            *extra,
+        )
+
+    def test_parallel_workers_play_every_game_once(self):
+        self.start_reps(7, "--workers", "4")
+
+        ledger = self.ledger()
+        self.assertEqual(sorted(entry["repetition"] for entry in ledger), list(range(1, 8)))
+        self.assertTrue(all(entry["status"] == "completed" for entry in ledger))
+        runs = sorted(path.name for path in (self.experiment / "runs").glob("*.json"))
+        self.assertEqual(runs, sorted(f"puzzle-0-rep{r}-attempt1.json" for r in range(1, 8)))
+        summary = (self.experiment / "run_summary.csv").read_text(encoding="utf-8").splitlines()
+        self.assertEqual(len(summary), 1 + 7)
+
+        # A resume afterwards finds nothing left to play.
+        run_main("resume", "--experiment-dir", str(self.experiment), "--workers", "4")
+        self.assertEqual(len(self.ledger()), 7)
+
+    def test_max_runs_limits_started_games_with_workers(self):
+        self.start_reps(6, "--workers", "4", "--max-runs", "2")
+        self.assertEqual(len(self.ledger()), 2)
+
+        run_main("resume", "--experiment-dir", str(self.experiment), "--workers", "3")
+        self.assertEqual(sorted(e["repetition"] for e in self.ledger()), list(range(1, 7)))
+
+    def test_peak_waits_for_running_games_before_pausing(self):
+        # Off-peak for the first two games, then peak: both finish, then a pause.
+        times = iter([datetime(2026, 10, 13, 12, 0, tzinfo=UTC)] * 2 + [datetime(2026, 10, 13, 2, 0, tzinfo=UTC)] * 10)
+        sleeps: list[float] = []
+        with (
+            mock.patch.object(runner, "_utcnow", side_effect=lambda: next(times)),
+            mock.patch.object(runner, "_sleep", side_effect=sleeps.append),
+            mock.patch.object(runner, "peak_wait_seconds", wraps=runner.peak_wait_seconds) as check,
+        ):
+            run_main(
+                "start",
+                "--experiment-dir", str(self.experiment),
+                "--manifest", str(self.manifest),
+                "--dataset", str(DATASET),
+                "--guess-list", str(GUESSES),
+                "--model", "scripted",
+                *DEEPSEEK, "--thinking", "disabled", "--temperature", "0.2",
+                "--max-rounds", "1",
+                "--repetitions", "3",
+                "--persona-preset", "pilot-02",
+                "--workers", "2",
+            )
+
+        self.assertEqual(sleeps[0], 2 * 3600)
+        self.assertEqual(len(self.ledger()), 3)
+        self.assertGreaterEqual(check.call_count, 3)
+
     def test_deepseek_rejects_settings_that_would_mislead(self):
         cases = [
             DEEPSEEK + ("--temperature", "0.2"),  # mode not chosen
@@ -199,6 +283,22 @@ class RunnerPersonaTest(unittest.TestCase):
                 self.start("--persona-preset", "pilot-02", backend=backend)
             self.assertEqual(raised.exception.code, 2)
             self.assertFalse(self.experiment.exists())
+
+
+class LossScoreTest(unittest.TestCase):
+    def test_loss_scores_one_above_the_guess_limit(self):
+        from ..experiment.summary import summarize_run
+
+        def lost(limit):
+            run = {
+                "status": "completed",
+                "metadata": {"puzzle_id": "1", **({"max_guesses": limit} if limit else {})},
+                "outcome": {"game_finished": True, "won": False, "guesses_used": limit or 6},
+            }
+            return summarize_run(run, "x.json")["penalized_score"]
+
+        self.assertEqual(lost(None), 7)  # runs recorded before the setting existed
+        self.assertEqual(lost(12), 13)
 
 
 if __name__ == "__main__":

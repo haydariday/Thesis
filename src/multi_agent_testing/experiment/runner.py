@@ -18,6 +18,14 @@ import os
 import subprocess
 import sys
 import time
+from concurrent.futures import (
+    ALL_COMPLETED,
+    FIRST_COMPLETED,
+    Future,
+    ThreadPoolExecutor,
+    wait,
+)
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from importlib import metadata as importlib_metadata
 from pathlib import Path
@@ -32,8 +40,10 @@ from ..agent.providers import (
     THINKING_MODES,
     default_api_key_env,
     endpoint_error,
+    REASONING_EFFORTS,
     extra_body,
     peak_wait_seconds,
+    reasoning_effort_error,
     request_options_error,
     settings_error,
 )
@@ -43,15 +53,16 @@ from ..games.wordle.dataset import (
     load_allowed_guesses,
     load_puzzle,
 )
-from ..games.wordle.engine import WordleGame
+from ..games.wordle.engine import MAX_GUESS_LIMIT, STANDARD_GUESSES, WordleGame
 from ..play import play_wordle_game
 from ..run_log import RunLog
 from .summary import write_summary
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
-# A game takes about a minute, so do not start one this close to a peak window.
-PEAK_MARGIN_SECONDS = 180.0
+# Do not start a game this close to a peak window: thinking-mode games take
+# about 11 minutes.
+PEAK_MARGIN_SECONDS = 15 * 60.0
 
 
 def _utcnow() -> datetime:
@@ -176,6 +187,8 @@ def build_config(args) -> dict:
         "base_url": args.base_url,
         "temperature": args.temperature,
         "thinking": args.thinking,
+        "reasoning_effort": args.reasoning_effort,
+        "max_guesses": args.max_guesses,
         "max_tokens": args.max_tokens,
         "json_mode": args.json_mode,
         "stream": False,
@@ -241,7 +254,9 @@ def build_backend(
         api_key=api_key,
         request_timeout=settings["request_timeout"],
         api_retries=settings["api_retries"],
-        extra_body=extra_body(settings.get("thinking")),
+        extra_body=extra_body(
+            settings.get("thinking"), settings.get("reasoning_effort")
+        ),
         max_tokens=settings.get("max_tokens"),
         json_mode=settings.get("json_mode", False),
     )
@@ -292,7 +307,7 @@ def validate_start_args(parser, args) -> None:
         args.backend, args.protocol, args.temperature, args.thinking
     ) or endpoint_error(args.backend, args.base_url) or request_options_error(
         args.protocol, args.max_tokens, args.json_mode
-    )
+    ) or reasoning_effort_error(args.thinking, args.reasoning_effort)
     if error is not None:
         parser.error(error)
 
@@ -318,6 +333,55 @@ def validate_start_args(parser, args) -> None:
         parser.error("--limit must be positive.")
 
 
+@dataclass(frozen=True)
+class PlannedGame:
+    """One attempt chosen to run: a (puzzle, repetition) unit and its file."""
+
+    index: int
+    puzzle_id: str
+    repetition: int
+    attempt: int
+    run_path: Path
+
+
+def pending_games(
+    units: list[tuple[str, int]],
+    attempts: dict[tuple[str, int], list[dict]],
+    runs_dir: Path,
+    max_attempts: int,
+) -> list[PlannedGame]:
+    """Units still to play, skipping completed and exhausted ones."""
+
+    pending: list[PlannedGame] = []
+    for index, (puzzle_id, repetition) in enumerate(units, start=1):
+        records = attempts.get((puzzle_id, repetition), [])
+
+        if any(record["status"] == "completed" for record in records):
+            continue
+
+        if len(records) >= max_attempts:
+            print(
+                f"[{index}/{len(units)}] puzzle {puzzle_id} rep "
+                f"{repetition}: replacements exhausted, skipped"
+            )
+            continue
+
+        attempt = records[-1]["attempt"] + 1 if records else 1
+        run_path = runs_dir / (
+            f"puzzle-{puzzle_id}-rep{repetition}-attempt{attempt}.json"
+        )
+
+        if run_path.exists():
+            print(
+                f"[{index}/{len(units)}] puzzle {puzzle_id} rep "
+                f"{repetition}: stale attempt file exists, skipped"
+            )
+            continue
+
+        pending.append(PlannedGame(index, puzzle_id, repetition, attempt, run_path))
+    return pending
+
+
 def execute_plan(
     experiment_dir: Path,
     config: dict,
@@ -325,7 +389,16 @@ def execute_plan(
     max_runs: int | None = None,
     max_seconds: float | None = None,
     allow_peak: bool = False,
+    workers: int = 1,
+    peak_margin_seconds: float = PEAK_MARGIN_SECONDS,
 ) -> None:
+    """Play every pending game, ``workers`` at a time.
+
+    Worker threads only play games.  Choosing games, the peak-hour pause,
+    the ledger, the summary and all counters stay in this thread, so no
+    file or counter is shared between threads.
+    """
+
     settings = config["settings"]
     runs_dir = experiment_dir / "runs"
     runs_dir.mkdir(exist_ok=True)
@@ -334,6 +407,7 @@ def execute_plan(
 
     backend = build_backend(settings)
     allowed_guesses = load_allowed_guesses(Path(config["guess_list"]))
+    max_guesses = settings.get("max_guesses", STANDARD_GUESSES)
 
     puzzle_cache: dict[str, WordlePuzzle] = {}
     attempts = scan_attempts(runs_dir)
@@ -351,185 +425,208 @@ def execute_plan(
         f"{len(units)} planned games"
     )
 
+    queue = pending_games(
+        units, attempts, runs_dir, settings["max_attempts_per_unit"]
+    )
+    if workers > 1:
+        print(f"{len(queue)} game(s) to play, {workers} at a time.")
+
+    def play(planned: PlannedGame, puzzle: WordlePuzzle) -> tuple[RunLog, float]:
+        game = WordleGame(
+            puzzle,
+            allowed_guesses=allowed_guesses,
+            max_attempts=max_guesses,
+        )
+        bridge = WordleBridge(game)
+        lineup = lineup_from_config(settings.get("personas"), backend)
+
+        metadata = {
+            "experiment_id": config["experiment_id"],
+            "backend": settings["backend"],
+            "protocol": settings.get("protocol", "chat"),
+            "model_requested": settings["model"],
+            "base_url": settings["base_url"],
+            "temperature": settings["temperature"],
+            "thinking": settings.get("thinking"),
+            "reasoning_effort": settings.get("reasoning_effort"),
+            "max_guesses": max_guesses,
+            "max_tokens": settings.get("max_tokens"),
+            "json_mode": settings.get("json_mode", False),
+            "stream": settings["stream"],
+            "max_rounds": settings["max_rounds"],
+            "max_repairs": settings["max_repairs"],
+            "request_timeout": settings["request_timeout"],
+            "api_retries": settings["api_retries"],
+            "puzzle_id": puzzle.puzzle_id,
+            "target_answer": puzzle.answer,
+            "guess_policy": game.observation()["guess_policy"],
+            "vocabulary_size": len(allowed_guesses),
+            "dataset_sha256": config["dataset_sha256"],
+            "guess_list_sha256": config["guess_list_sha256"],
+            "repetition": planned.repetition,
+            "attempt": planned.attempt,
+            "agent_instructions": lineup.instructions(),
+            "personas": lineup.config(),
+        }
+
+        run = RunLog(metadata=metadata, path=planned.run_path)
+        run_started = time.perf_counter()
+        play_wordle_game(
+            game=game,
+            bridge=bridge,
+            lineup=lineup,
+            run=run,
+            max_rounds=settings["max_rounds"],
+            max_repairs=settings["max_repairs"],
+            stream=False,
+            echo=False,
+            raise_errors=False,
+        )
+        return run, time.perf_counter() - run_started
+
     started_at = time.perf_counter()
     paused_seconds = 0.0
     runs_done = 0
     completed_runs = 0
+    submitted = 0
+    in_flight: dict[Future, PlannedGame] = {}
 
-    try:
-        for index, (puzzle_id, repetition) in enumerate(units, start=1):
-            if max_runs is not None and runs_done >= max_runs:
-                print(f"Stopping after {runs_done} executed attempt(s).")
-                break
+    def record(planned: PlannedGame, run: RunLog, elapsed: float) -> None:
+        nonlocal runs_done, completed_runs
 
-            if (
-                max_seconds is not None
-                and runs_done > 0
-                and time.perf_counter() - started_at - paused_seconds >= max_seconds
-            ):
-                print(
-                    f"Stopping after {max_seconds:.0f} seconds of work."
+        status = run.data["status"]
+        outcome = run.data.get("outcome") or {}
+        error = run.data.get("error") or {}
+
+        with ledger_path.open("a", encoding="utf-8") as file:
+            file.write(
+                json.dumps(
+                    {
+                        "timestamp": datetime.now(UTC).isoformat(),
+                        "experiment_id": config["experiment_id"],
+                        "puzzle_id": planned.puzzle_id,
+                        "repetition": planned.repetition,
+                        "attempt": planned.attempt,
+                        "status": status,
+                        "won": outcome.get("won"),
+                        "guesses_used": outcome.get("guesses_used"),
+                        "elapsed_seconds": round(elapsed, 3),
+                        "error_type": error.get("type"),
+                        "run_file": planned.run_path.name,
+                    }
                 )
-                break
-
-            records = attempts.get((puzzle_id, repetition), [])
-
-            if any(
-                record["status"] == "completed" for record in records
-            ):
-                continue
-
-            if len(records) >= settings["max_attempts_per_unit"]:
-                print(
-                    f"[{index}/{len(units)}] puzzle {puzzle_id} rep "
-                    f"{repetition}: replacements exhausted, skipped"
-                )
-                continue
-
-            attempt = records[-1]["attempt"] + 1 if records else 1
-            run_path = runs_dir / (
-                f"puzzle-{puzzle_id}-rep{repetition}"
-                f"-attempt{attempt}.json"
+                + "\n"
             )
 
-            if run_path.exists():
-                print(
-                    f"[{index}/{len(units)}] puzzle {puzzle_id} rep "
-                    f"{repetition}: stale attempt file exists, skipped"
-                )
-                continue
-
-            if not allow_peak:
-                wait = peak_wait_seconds(
-                    settings["backend"], _utcnow(), PEAK_MARGIN_SECONDS
-                )
-                if wait > 0:
-                    until = _utcnow() + timedelta(seconds=wait)
-                    print(
-                        f"Peak-price hours for {settings['backend']}: pausing "
-                        f"until {until:%Y-%m-%d %H:%M} UTC. Ctrl-C is safe; "
-                        "resume later."
-                    )
-                    _sleep(wait)
-                    paused_seconds += wait
-
-            if puzzle_id not in puzzle_cache:
-                puzzle_cache[puzzle_id] = load_puzzle(
-                    path=Path(config["dataset"]),
-                    puzzle_id=puzzle_id,
-                )
-
-            puzzle = puzzle_cache[puzzle_id]
-            game = WordleGame(
-                puzzle,
-                allowed_guesses=allowed_guesses,
-            )
-            bridge = WordleBridge(game)
-            lineup = lineup_from_config(settings.get("personas"), backend)
-
-            metadata = {
-                "experiment_id": config["experiment_id"],
-                "backend": settings["backend"],
-                "protocol": settings.get("protocol", "chat"),
-                "model_requested": settings["model"],
-                "base_url": settings["base_url"],
-                "temperature": settings["temperature"],
-                "thinking": settings.get("thinking"),
-                "max_tokens": settings.get("max_tokens"),
-                "json_mode": settings.get("json_mode", False),
-                "stream": settings["stream"],
-                "max_rounds": settings["max_rounds"],
-                "max_repairs": settings["max_repairs"],
-                "request_timeout": settings["request_timeout"],
-                "api_retries": settings["api_retries"],
-                "puzzle_id": puzzle.puzzle_id,
-                "target_answer": puzzle.answer,
-                "guess_policy": game.observation()["guess_policy"],
-                "vocabulary_size": len(allowed_guesses),
-                "dataset_sha256": config["dataset_sha256"],
-                "guess_list_sha256": config["guess_list_sha256"],
-                "repetition": repetition,
-                "attempt": attempt,
-                "agent_instructions": lineup.instructions(),
-                "personas": lineup.config(),
+        attempts.setdefault((planned.puzzle_id, planned.repetition), []).append(
+            {
+                "attempt": planned.attempt,
+                "status": status,
+                "won": outcome.get("won"),
+                "file": planned.run_path.name,
             }
-
-            run = RunLog(metadata=metadata, path=run_path)
-            run_started = time.perf_counter()
-
-            play_wordle_game(
-                game=game,
-                bridge=bridge,
-                lineup=lineup,
-                run=run,
-                max_rounds=settings["max_rounds"],
-                max_repairs=settings["max_repairs"],
-                stream=False,
-                echo=False,
-                raise_errors=False,
-            )
-
-            elapsed = time.perf_counter() - run_started
-            status = run.data["status"]
-            outcome = run.data.get("outcome") or {}
-            error = run.data.get("error") or {}
-
-            with ledger_path.open("a", encoding="utf-8") as file:
-                file.write(
-                    json.dumps(
-                        {
-                            "timestamp": datetime.now(
-                                UTC
-                            ).isoformat(),
-                            "experiment_id": config["experiment_id"],
-                            "puzzle_id": puzzle_id,
-                            "repetition": repetition,
-                            "attempt": attempt,
-                            "status": status,
-                            "won": outcome.get("won"),
-                            "guesses_used": outcome.get("guesses_used"),
-                            "elapsed_seconds": round(elapsed, 3),
-                            "error_type": error.get("type"),
-                            "run_file": run_path.name,
-                        }
-                    )
-                    + "\n"
-                )
-
-            attempts.setdefault((puzzle_id, repetition), []).append(
-                {
-                    "attempt": attempt,
-                    "status": status,
-                    "won": outcome.get("won"),
-                    "file": run_path.name,
-                }
-            )
-
-            runs_done += 1
-
-            if status == "completed":
-                completed_runs += 1
-
-            write_summary(runs_dir, summary_path)
-
-            print(
-                f"[{index}/{len(units)}] puzzle {puzzle_id} rep "
-                f"{repetition} attempt {attempt}: {status} "
-                f"(won={outcome.get('won')}, "
-                f"guesses={outcome.get('guesses_used')}, "
-                f"{elapsed:.1f}s)",
-                flush=True,
-            )
-
-    except KeyboardInterrupt:
-        print("\nInterrupted. Resume with:")
-        print(
-            "  python -m multi_agent_testing.experiment.runner resume "
-            f"--experiment-dir {experiment_dir}"
         )
-        raise SystemExit(130)
+        runs_done += 1
+        if status == "completed":
+            completed_runs += 1
+        write_summary(runs_dir, summary_path)
+
+        print(
+            f"[{planned.index}/{len(units)}] puzzle {planned.puzzle_id} rep "
+            f"{planned.repetition} attempt {planned.attempt}: {status} "
+            f"(won={outcome.get('won')}, "
+            f"guesses={outcome.get('guesses_used')}, "
+            f"{elapsed:.1f}s)",
+            flush=True,
+        )
+
+    def collect(return_when: str) -> None:
+        done, _ = wait(list(in_flight), return_when=return_when)
+        for future in done:
+            planned = in_flight.pop(future)
+            run, elapsed = future.result()
+            record(planned, run, elapsed)
+
+    def may_start() -> bool:
+        if max_runs is not None and submitted >= max_runs:
+            print(f"Stopping after {submitted} started attempt(s).")
+            return False
+        if (
+            max_seconds is not None
+            and submitted > 0
+            and time.perf_counter() - started_at - paused_seconds >= max_seconds
+        ):
+            print(f"Stopping after {max_seconds:.0f} seconds of work.")
+            return False
+        return True
+
+    pool = ThreadPoolExecutor(max_workers=workers)
+    try:
+        try:
+            for planned in queue:
+                while len(in_flight) >= workers:
+                    collect(FIRST_COMPLETED)
+
+                if not may_start():
+                    break
+
+                if not allow_peak:
+                    wait_seconds = peak_wait_seconds(
+                        settings["backend"], _utcnow(), peak_margin_seconds
+                    )
+                    if wait_seconds > 0:
+                        if in_flight:
+                            collect(ALL_COMPLETED)
+                        wait_seconds = peak_wait_seconds(
+                            settings["backend"], _utcnow(), peak_margin_seconds
+                        )
+                    if wait_seconds > 0:
+                        until = _utcnow() + timedelta(seconds=wait_seconds)
+                        print(
+                            f"Peak-price hours for {settings['backend']}: "
+                            f"pausing until {until:%Y-%m-%d %H:%M} UTC. "
+                            "Ctrl-C is safe; resume later.",
+                            flush=True,
+                        )
+                        _sleep(wait_seconds)
+                        paused_seconds += wait_seconds
+
+                if planned.puzzle_id not in puzzle_cache:
+                    puzzle_cache[planned.puzzle_id] = load_puzzle(
+                        path=Path(config["dataset"]),
+                        puzzle_id=planned.puzzle_id,
+                    )
+                future = pool.submit(play, planned, puzzle_cache[planned.puzzle_id])
+                in_flight[future] = planned
+                submitted += 1
+
+            while in_flight:
+                collect(FIRST_COMPLETED)
+
+        except KeyboardInterrupt:
+            print(
+                f"\nInterrupted. Waiting for {len(in_flight)} running game(s) "
+                "to finish; press Ctrl-C again to abandon them."
+            )
+            try:
+                while in_flight:
+                    collect(FIRST_COMPLETED)
+            except KeyboardInterrupt:
+                write_summary(runs_dir, summary_path)
+                print(
+                    "Abandoned running games; their files stay 'running' and "
+                    "count as failed attempts on resume."
+                )
+                os._exit(130)
+            print("Resume with:")
+            print(
+                "  python -m multi_agent_testing.experiment.runner resume "
+                f"--experiment-dir {experiment_dir}"
+            )
+            raise SystemExit(130)
 
     finally:
+        pool.shutdown(wait=True, cancel_futures=True)
         write_summary(runs_dir, summary_path)
         print(f"\nSummary: {summary_path}")
         print(
@@ -582,6 +679,8 @@ def run_start(parser, args) -> None:
         max_runs=args.max_runs,
         max_seconds=args.max_seconds,
         allow_peak=args.allow_peak,
+        workers=args.workers,
+        peak_margin_seconds=args.peak_margin_minutes * 60,
     )
 
 
@@ -637,6 +736,8 @@ def run_resume(args) -> None:
         max_runs=args.max_runs,
         max_seconds=args.max_seconds,
         allow_peak=args.allow_peak,
+        workers=args.workers,
+        peak_margin_seconds=args.peak_margin_minutes * 60,
     )
 
 
@@ -660,6 +761,20 @@ def add_run_controls(parser: argparse.ArgumentParser) -> None:
             "DeepSeek only: keep starting games during peak-price hours "
             "(default: pause until off-peak)."
         ),
+    )
+    parser.add_argument(
+        "--peak-margin-minutes",
+        type=float,
+        default=PEAK_MARGIN_SECONDS / 60,
+        help="Do not start a game this many minutes before a peak window.",
+    )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        choices=range(1, 33),
+        default=1,
+        metavar="1..32",
+        help="Games played at the same time (results do not depend on it).",
     )
 
 
@@ -695,6 +810,19 @@ def main() -> None:
         "--thinking",
         choices=THINKING_MODES,
         help="DeepSeek reasoning mode; temperature only applies when disabled.",
+    )
+    start.add_argument(
+        "--reasoning-effort",
+        choices=REASONING_EFFORTS,
+        help="DeepSeek thinking depth; needs --thinking enabled.",
+    )
+    start.add_argument(
+        "--max-guesses",
+        type=int,
+        choices=range(1, MAX_GUESS_LIMIT + 1),
+        default=STANDARD_GUESSES,
+        metavar=f"1..{MAX_GUESS_LIMIT}",
+        help="Guess limit per game (Wordle: 6). A loss scores this plus 1.",
     )
     start.add_argument(
         "--max-tokens",

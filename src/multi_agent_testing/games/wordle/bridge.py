@@ -12,6 +12,13 @@ class WordleBridge:
 
     def observe(self) -> str:
         observation = self._game.observation()
+        # Agents never see the guess limit, so the first six guesses play the
+        # same under a 6- or 12-guess limit. Run logs still record it.
+        observation = {
+            key: value
+            for key, value in observation.items()
+            if key != "attempts_remaining"
+        }
 
         return json.dumps(
             {

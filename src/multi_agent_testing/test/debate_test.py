@@ -18,13 +18,15 @@ from ..agent.providers import (
     THINKING_MODES,
     default_api_key_env,
     endpoint_error,
+    REASONING_EFFORTS,
     extra_body,
+    reasoning_effort_error,
     request_options_error,
     settings_error,
 )
 from ..games.wordle.bridge import WordleBridge
 from ..games.wordle.dataset import load_allowed_guesses, load_puzzle
-from ..games.wordle.engine import WordleGame
+from ..games.wordle.engine import MAX_GUESS_LIMIT, STANDARD_GUESSES, WordleGame
 from ..orchestra.debate import create_debate_graph
 from ..orchestra.debate_context import new_debate_state
 from ..orchestra.flow.sequential import recursion_limit
@@ -78,6 +80,19 @@ def main() -> None:
         "--thinking",
         choices=THINKING_MODES,
         help="DeepSeek reasoning mode; temperature only applies when disabled.",
+    )
+    parser.add_argument(
+        "--reasoning-effort",
+        choices=REASONING_EFFORTS,
+        help="DeepSeek thinking depth; needs --thinking enabled.",
+    )
+    parser.add_argument(
+        "--max-guesses",
+        type=int,
+        choices=range(1, MAX_GUESS_LIMIT + 1),
+        default=STANDARD_GUESSES,
+        metavar=f"1..{MAX_GUESS_LIMIT}",
+        help="Guess limit per game (Wordle: 6). A loss scores this plus 1.",
     )
     parser.add_argument(
         "--max-tokens",
@@ -212,7 +227,7 @@ def main() -> None:
             args.backend, args.protocol, args.temperature, args.thinking
         ) or endpoint_error(args.backend, args.base_url) or request_options_error(
             args.protocol, args.max_tokens, args.json_mode
-        )
+        ) or reasoning_effort_error(args.thinking, args.reasoning_effort)
         if error is not None:
             parser.error(error)
 
@@ -254,7 +269,7 @@ def main() -> None:
                 api_key=api_key,
                 request_timeout=args.request_timeout,
                 api_retries=args.api_retries,
-                extra_body=extra_body(args.thinking),
+                extra_body=extra_body(args.thinking, args.reasoning_effort),
                 max_tokens=args.max_tokens,
                 json_mode=args.json_mode,
             )
@@ -277,6 +292,7 @@ def main() -> None:
         game = WordleGame(
             puzzle,
             allowed_guesses=allowed_guesses,
+            max_attempts=args.max_guesses,
         )
 
         bridge = WordleBridge(game)
@@ -289,6 +305,8 @@ def main() -> None:
                 "base_url": args.base_url,
                 "temperature": args.temperature,
                 "thinking": args.thinking,
+                "reasoning_effort": args.reasoning_effort,
+                "max_guesses": args.max_guesses,
                 "max_tokens": args.max_tokens,
                 "json_mode": args.json_mode,
                 "stream": args.stream,

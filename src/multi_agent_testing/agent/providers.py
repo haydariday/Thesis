@@ -30,6 +30,8 @@ PROVIDERS = {
 }
 
 THINKING_MODES = ("enabled", "disabled")
+# DeepSeek maps other names onto these three.
+REASONING_EFFORTS = ("low", "high", "max")
 
 
 def endpoint_error(backend: str, base_url: str) -> str | None:
@@ -135,9 +137,21 @@ def default_api_key_env(backend: str) -> str | None:
     return provider.api_key_env if provider is not None else None
 
 
-def extra_body(thinking: str | None) -> dict[str, Any] | None:
+def extra_body(
+    thinking: str | None,
+    reasoning_effort: str | None = None,
+) -> dict[str, Any] | None:
     """Provider-specific request fields beyond the OpenAI schema."""
 
     if thinking is None:
         return None
-    return {"thinking": {"type": thinking}}
+    body: dict[str, Any] = {"thinking": {"type": thinking}}
+    if reasoning_effort is not None:
+        body["reasoning_effort"] = reasoning_effort
+    return body
+
+
+def reasoning_effort_error(thinking: str | None, reasoning_effort: str | None) -> str | None:
+    if reasoning_effort is not None and thinking != "enabled":
+        return "--reasoning-effort needs --thinking enabled."
+    return None

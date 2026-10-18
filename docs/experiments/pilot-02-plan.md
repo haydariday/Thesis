@@ -230,6 +230,36 @@ uv run python -m multi_agent_testing.experiment.runner resume \
 
 Between P10 and P11, the checkpoint in Section 9 applies: run `analysis_pilot02 --wide experiments/pilot-02-wide --output-dir <a scratch folder>` and look at the fingerprints and the Cautious minus Bold gap before starting P11.
 
+### 6.2 Configuration vA (tag `pilot-02-va-frozen`, 2026-10-19)
+
+The first P10 run under 6.1 (`experiments/pilot-02-wide`, 2026-10-13) completed 125 of 144 units. All 19 failures were repair errors. It is kept as a record and does not pool with vA.
+
+Three variants were then smoke-tested on 8 puzzles (2 per quartile) × 2 games. The files are `runs/smoke-vA-*`, `runs/smoke-vB-*` and `runs/smoke-vC-*`.
+
+| Variant | Settings | Completed | Spearman vs human | Cost of 528 games (off-peak) |
+|---|---|---|---|---|
+| vA | thinking off, temperature 0.2, 12 guesses | 13/16 | 0.72 (7 puzzles) | about $5 |
+| vB | thinking on, effort `low`, 6 guesses, `max_tokens=4096` | 16/16 | 0.25 | about $24 |
+| vC | thinking off, temperature 1.0, 12 guesses | 15/16 | 0.13 | about $6 |
+
+vB won every game in 3 or 4 guesses, so it barely separates the quartiles (`runs/workers-check-v2`). vC adds noise that blurs the ranking. vA is run first. vB may follow as a second configuration on the same manifests.
+
+**Guess limit.** Agents never see the limit (`bridge.py` drops `attempts_remaining`). The first six guesses therefore play the same as under a 6-guess limit. A vA score capped at 7 equals the real Wordle score. The extra guesses keep hard puzzles apart instead of tying them at 7. This follows the handicap in Xiao and Yang (2025).
+
+**RQ2 under vA.** Relative difficulty is primary: Spearman ρ on raw scores (1–13). Sensitivity checks cap the scores at 9 and at 7. MAE, the cut-point D1–D4 table and the 7-bin comparison use scores capped at 7. Kendall τ, rank-based system quartiles and the score cap are added to `analysis_pilot02` after both vA runs finish, since `resume` refuses any source change.
+
+| Item | vA value (changes from 6.1 in bold) |
+|---|---|
+| Sampling | thinking `disabled`, temperature `0.2`, `max_tokens=1024`, JSON mode on |
+| Guess limit | **`--max-guesses 12`**, a loss scores 13 |
+| Debate | preset `pilot-02`, `max_rounds=3`, **`max_repairs=2`** |
+| Requests | `request_timeout=300`, `api_retries=1`, `max_attempts_per_unit=2`, **`--workers 4`** (results do not depend on it) |
+| Source | `source_sha256` `2f8459e9567f53fa1772f8c6af568845165f270862e8fb92dd25927daa4339ce` |
+| Data, manifests, human data, environment | as in 6.1 |
+| Output | `experiments/pilot-02-va-wide`, `experiments/pilot-02-va-deep` |
+
+The run rules of 6.1 apply. Wide (about 1 hour with 4 workers) and deep (about 2.5 hours) run back to back from the tag, off-peak only. The command is the 6.1 command with `--max-guesses 12 --max-repairs 2 --workers 4` and the vA output dirs. `--max-seconds` is not needed, since the runner pauses for peak hours on its own.
+
 ## 7. Analysis
 
 A new `experiment/analysis_pilot02.py` reads both experiment directories and writes CSV and JSON outputs. Like the current `analysis.py`, it uses only the standard library.

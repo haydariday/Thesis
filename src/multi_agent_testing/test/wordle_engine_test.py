@@ -67,6 +67,16 @@ class WordleEngineTests(unittest.TestCase):
 
 
 
+class GuessLimitTests(unittest.TestCase):
+    def test_handicap_up_to_twelve_guesses(self):
+        game = WordleGame(WordlePuzzle("t", "CIGAR"), max_attempts=12)
+        self.assertEqual(game.observation()["attempts_remaining"], 12)
+
+        for bad in (0, 13):
+            with self.subTest(limit=bad), self.assertRaises(ValueError):
+                WordleGame(WordlePuzzle("t", "CIGAR"), max_attempts=bad)
+
+
 class ValidationMessageTests(unittest.TestCase):
     """Repair messages must say what is wrong, never reveal the answer."""
 

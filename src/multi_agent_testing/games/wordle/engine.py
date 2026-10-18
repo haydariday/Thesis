@@ -5,6 +5,12 @@ from dataclasses import asdict, dataclass
 from .dataset import WordlePuzzle
 
 
+# Real Wordle allows 6 guesses. Up to 12 is allowed as a handicap for weaker
+# players, as in Xiao and Yang (2025).
+STANDARD_GUESSES = 6
+MAX_GUESS_LIMIT = 12
+
+
 def normalize_guess(value: str) -> str:
     word = value.strip().upper()
 
@@ -53,10 +59,10 @@ class WordleGame:
         puzzle: WordlePuzzle,
         *,
         allowed_guesses: Collection[str] | None = None,
-        max_attempts: int = 6,
+        max_attempts: int = STANDARD_GUESSES,
     ) -> None:
-        if type(max_attempts) is not int or not 1 <= max_attempts <= 6:
-            raise ValueError("max_attempts must be between 1 and 6.")
+        if type(max_attempts) is not int or not 1 <= max_attempts <= MAX_GUESS_LIMIT:
+            raise ValueError(f"max_attempts must be between 1 and {MAX_GUESS_LIMIT}.")
 
         self.puzzle_id = puzzle.puzzle_id
         self._answer = normalize_guess(puzzle.answer)
