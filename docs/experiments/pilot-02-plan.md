@@ -258,6 +258,8 @@ vB won every game in 3 or 4 guesses, so it barely separates the quartiles (`runs
 | Data, manifests, human data, environment | as in 6.1 |
 | Output | `experiments/pilot-02-va-wide`, `experiments/pilot-02-va-deep` |
 
+**Fingerprint.** Every answered vA call returned `system_fingerprint` `e72d3c7f663d3e1383b00b3884cb4501`. All earlier calls, up to the 2026-10-16 check, returned `aeb56401…`, so DeepSeek changed the backend between 16 and 18 October. The vA smoke evidence above comes from the older backend.
+
 The run rules of 6.1 apply. Wide (about 1 hour with 4 workers) and deep (about 2.5 hours) run back to back from the tag, off-peak only. The command is the 6.1 command with `--max-guesses 12 --max-repairs 2 --workers 4` and the vA output dirs. `--max-seconds` is not needed, since the runner pauses for peak hours on its own.
 
 ## 7. Analysis

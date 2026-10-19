@@ -1,6 +1,6 @@
 import unittest
 
-from ..experiment.quartiles import QUARTILE_LABELS, RankedPuzzle, assign_quartiles, map_score
+from ..experiment.quartiles import QUARTILE_LABELS, RankedPuzzle, assign_quartiles, map_score, rank_split
 
 
 def _puzzles(means):
@@ -64,6 +64,30 @@ class MapScoreTest(unittest.TestCase):
             map_score(4.0, (4.0, 3.0, 5.0))
         with self.assertRaises(ValueError):
             map_score(4.0, (4.0, 5.0))
+
+
+class RankSplitTest(unittest.TestCase):
+    def test_matches_assign_quartiles(self):
+        means = [4.3, 3.9, 5.0, 4.1, 4.6, 3.7, 4.4, 4.0, 4.8]
+        labels, _ = assign_quartiles(_puzzles(means))
+        self.assertEqual(rank_split(means, list(range(len(means)))),
+                         [labels[str(i)] for i in range(len(means))])
+
+    def test_scale_free(self):
+        # A system two guesses worse in the same order gets the same labels.
+        means = [3.8, 4.0, 4.2, 4.6]
+        self.assertEqual(rank_split([m + 2 for m in means], [1, 2, 3, 4]), ["D1", "D2", "D3", "D4"])
+
+    def test_ties_by_key_then_position(self):
+        # Equal values: tie key 9 ranks after key 1; the repeated key 5 keeps
+        # its input order, as in a bootstrap sample that draws a puzzle twice.
+        self.assertEqual(rank_split([4.0, 4.0, 3.0, 3.0], [9, 1, 5, 5]), ["D4", "D3", "D1", "D2"])
+
+    def test_rejects_bad_input(self):
+        with self.assertRaises(ValueError):
+            rank_split([1.0, 2.0, 3.0], [1, 2, 3])
+        with self.assertRaises(ValueError):
+            rank_split([1.0, 2.0, 3.0, 4.0], [1, 2, 3])
 
 
 if __name__ == "__main__":

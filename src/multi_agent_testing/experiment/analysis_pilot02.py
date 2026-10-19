@@ -16,15 +16,25 @@ Usage::
 
 Study conventions encoded here:
 
-* Finished losses score 7.  Only completed runs carry a score; failed
-  attempts are counted separately and never scored.
+* Finished losses score the guess limit plus 1 (7 in standard Wordle).
+  Only completed runs carry a score; failed attempts are counted
+  separately and never scored.
+* An experiment with more than 6 guesses (configuration vA: 12) is also
+  read with scores capped at a smaller guess limit (``cap_scores``).
+  Agents never see the limit, so a game capped at 6 is the real Wordle
+  game.  The ``capped`` block holds RQ1 and RQ2 for 6 guesses (the human
+  scale) and for ``SENSITIVITY_GUESSES``.  The 7-bin distribution always
+  uses the 6-guess scores.
 * RQ1 is descriptive in pilot-02 (decided at P0): estimates with CIs and no
   pass/fail margin.  Exp A is the primary RQ1 source; Exp B's 3-run figures
   are reported for completeness only.
 * RQ2 pairs each puzzle's system mean with its human mean.  Exp B is the
   primary RQ2 source and Exp A a check.  The human quartile is the frozen
-  rank-based label from the manifest; the system mean is mapped by value
-  with the frozen cut-points (``quartiles.map_score``).
+  rank-based label from the manifest.  The system mean is mapped two ways:
+  by value with the frozen cut-points (``quartiles.map_score``) and by rank
+  among the puzzles at hand (``quartiles.rank_split``, the ``rank_*``
+  metrics).  Rank measures (Spearman, Kendall tau-b, rank quartiles) do not
+  need the system to play on the human scale.
 * CIs come from a puzzle-level bootstrap stratified by human quartile, so
   every resample keeps the design's quartile balance.  Runs are never
   treated as independent puzzles.
@@ -47,7 +57,7 @@ import json
 import random
 import statistics
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -75,12 +85,14 @@ from .distribution import (
     total_variation,
     wasserstein_1,
 )
+from ..games.wordle.engine import STANDARD_GUESSES
 from .persona_stats import load_games, opener_rows, persona_statistics
-from .quartiles import QUARTILE_LABELS, map_score
+from .quartiles import QUARTILE_LABELS, map_score, rank_split
 
 DEFAULT_SEED = 20261015
-LOSS_SCORE = 7.0
 MIN_RUNS_FOR_DISTRIBUTION = 10
+# Extra guess limits read from longer games as a sensitivity check (plan 6.2).
+SENSITIVITY_GUESSES = (8,)
 HUMAN_BINS = ("p1", "p2", "p3", "p4", "p5", "p6", "p7")
 
 # Settings that may differ between Exp A and Exp B without breaking pooling.
@@ -102,8 +114,10 @@ PUZZLE_SUMMARY_COLUMNS = (
     "win_rate",
     "system_mean",
     "system_sd",
+    "system_mean_6_guesses",
     "system_quartile",
     "quartile_shift",
+    "system_rank_quartile",
     "mean_error",
     "exact_match_rate",
     "mean_pairwise_abs_diff",
@@ -221,6 +235,10 @@ def load_fingerprints(runs_dir: Path) -> dict[str, int]:
         except (OSError, json.JSONDecodeError):
             continue
         for call in run.get("calls") or []:
+            # A call that failed without a reply (e.g. a timeout) was never
+            # answered by any model, so it has nothing to fingerprint.
+            if not call.get("system_fingerprint") and call.get("error_type"):
+                continue
             key = call.get("system_fingerprint") or "unknown"
             counts[key] = counts.get(key, 0) + 1
     return dict(sorted(counts.items()))
@@ -297,6 +315,53 @@ def load_experiment(name: str, directory: Path) -> Experiment:
         puzzles=tuple(puzzles),
         attempts=len(attempts),
         fingerprints=load_fingerprints(directory / "runs"),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Guess limits
+# ---------------------------------------------------------------------------
+
+
+def max_guesses(config: dict[str, Any]) -> int:
+    """The experiment's guess limit; configurations before vA used 6."""
+
+    return int((config.get("settings") or {}).get("max_guesses") or STANDARD_GUESSES)
+
+
+def cap_scores(puzzle: PuzzleRuns, guesses: int) -> PuzzleRuns:
+    """The puzzle's runs as if every game had stopped after ``guesses``.
+
+    Agents never see the guess limit, so the first ``guesses`` guesses of a
+    longer game are the same game.  Anything later is a loss scored
+    ``guesses + 1``.
+    """
+
+    loss = float(guesses + 1)
+    scores = tuple(min(score, loss) for score in puzzle.scores)
+    return replace(
+        puzzle,
+        scores=scores,
+        wins=sum(1 for score in scores if score < loss),
+        losses=sum(1 for score in scores if score == loss),
+    )
+
+
+def capped(experiment: Experiment, guesses: int) -> Experiment:
+    return replace(
+        experiment,
+        puzzles=tuple(cap_scores(p, guesses) for p in experiment.puzzles),
+    )
+
+
+def capped_limits(experiment: Experiment) -> list[int]:
+    """Smaller guess limits to read this experiment at, if any."""
+
+    limit = max_guesses(experiment.config)
+    return sorted(
+        guesses
+        for guesses in {STANDARD_GUESSES, *SENSITIVITY_GUESSES}
+        if guesses < limit
     )
 
 
@@ -440,22 +505,41 @@ def quadratic_weighted_kappa(
     return 1.0 - disagreement / expected
 
 
-def alignment_metrics(
-    puzzles: Sequence[PuzzleRuns],
-    cut_points: Sequence[float],
-) -> dict[str, Any]:
-    """RQ2 point estimates over puzzles with at least one completed run."""
+def kendall_tau_b(xs: Sequence[float], ys: Sequence[float]) -> float | None:
+    """Kendall's tau-b, which corrects for ties on either side."""
 
-    scored = [p for p in puzzles if p.system_mean is not None]
-    humans = [p.human_mean for p in scored]
-    systems = [p.system_mean for p in scored if p.system_mean is not None]
-    index = {label: position for position, label in enumerate(QUARTILE_LABELS)}
-    labels = [
-        (index[p.human_quartile], index[map_score(s, cut_points)])
-        for p, s in zip(scored, systems)
-    ]
-    size = len(QUARTILE_LABELS)
+    if len(xs) < 2 or len(xs) != len(ys):
+        return None
 
+    concordant = discordant = ties_x = ties_y = 0
+    for i in range(len(xs)):
+        for j in range(i + 1, len(xs)):
+            dx = xs[i] - xs[j]
+            dy = ys[i] - ys[j]
+            if dx == 0 and dy == 0:
+                continue
+            if dx == 0:
+                ties_x += 1
+            elif dy == 0:
+                ties_y += 1
+            elif (dx > 0) == (dy > 0):
+                concordant += 1
+            else:
+                discordant += 1
+
+    denominator = (
+        (concordant + discordant + ties_x) * (concordant + discordant + ties_y)
+    ) ** 0.5
+    if denominator == 0:
+        return None
+    return (concordant - discordant) / denominator
+
+
+def quartile_agreement(labels: Sequence[tuple[int, int]]) -> dict[str, Any]:
+    """Exact and adjacent agreement, QWK, recall and confusion for
+    ``(human, system)`` quartile indices."""
+
+    count = len(labels)
     confusion = {
         human: {system: 0 for system in QUARTILE_LABELS}
         for human in QUARTILE_LABELS
@@ -472,22 +556,71 @@ def alignment_metrics(
             else None
         )
 
-    count = len(labels)
+    return {
+        "exact": sum(1 for h, s in labels if h == s) / count if count else None,
+        "adjacent": (
+            sum(1 for h, s in labels if abs(h - s) <= 1) / count if count else None
+        ),
+        "kappa": quadratic_weighted_kappa(labels, len(QUARTILE_LABELS)),
+        "recall": recall,
+        "confusion": {"rows": "human", "columns": "system", "counts": confusion},
+    }
+
+
+def system_rank_quartiles(scored: Sequence[PuzzleRuns]) -> list[str] | None:
+    """D1..D4 of each scored puzzle's system mean by rank, or None below four."""
+
+    means = [p.system_mean for p in scored]
+    if len(means) < len(QUARTILE_LABELS) or any(m is None for m in means):
+        return None
+    return rank_split(
+        [m for m in means if m is not None],
+        [int(p.puzzle_id) for p in scored],
+    )
+
+
+def alignment_metrics(
+    puzzles: Sequence[PuzzleRuns],
+    cut_points: Sequence[float],
+) -> dict[str, Any]:
+    """RQ2 point estimates over puzzles with at least one completed run."""
+
+    scored = [p for p in puzzles if p.system_mean is not None]
+    humans = [p.human_mean for p in scored]
+    systems = [p.system_mean for p in scored if p.system_mean is not None]
+    index = {label: position for position, label in enumerate(QUARTILE_LABELS)}
+    by_value = quartile_agreement([
+        (index[p.human_quartile], index[map_score(s, cut_points)])
+        for p, s in zip(scored, systems)
+    ])
+    ranks = system_rank_quartiles(scored)
+    by_rank = (
+        quartile_agreement([
+            (index[p.human_quartile], index[label])
+            for p, label in zip(scored, ranks)
+        ])
+        if ranks is not None
+        else None
+    )
+
+    count = len(scored)
     return {
         "puzzles": count,
         "mae": statistics.fmean(abs(s - h) for h, s in zip(humans, systems)) if count else None,
         "signed_error": statistics.fmean(s - h for h, s in zip(humans, systems)) if count else None,
         "spearman": _spearman(humans, systems),
+        "kendall_tau_b": kendall_tau_b(humans, systems),
         "pearson": _pearson(humans, systems),
-        "quartile_exact": (
-            sum(1 for h, s in labels if h == s) / count if count else None
-        ),
-        "quartile_adjacent": (
-            sum(1 for h, s in labels if abs(h - s) <= 1) / count if count else None
-        ),
-        "quadratic_weighted_kappa": quadratic_weighted_kappa(labels, size),
-        "quartile_recall": recall,
-        "confusion_matrix": {"rows": "human", "columns": "system", "counts": confusion},
+        "quartile_exact": by_value["exact"],
+        "quartile_adjacent": by_value["adjacent"],
+        "quadratic_weighted_kappa": by_value["kappa"],
+        "quartile_recall": by_value["recall"],
+        "confusion_matrix": by_value["confusion"],
+        "rank_quartile_exact": by_rank["exact"] if by_rank else None,
+        "rank_quartile_adjacent": by_rank["adjacent"] if by_rank else None,
+        "rank_quadratic_weighted_kappa": by_rank["kappa"] if by_rank else None,
+        "rank_quartile_recall": by_rank["recall"] if by_rank else None,
+        "rank_confusion_matrix": by_rank["confusion"] if by_rank else None,
     }
 
 
@@ -495,10 +628,14 @@ RQ2_BOOTSTRAP = (
     "mae",
     "signed_error",
     "spearman",
+    "kendall_tau_b",
     "pearson",
     "quartile_exact",
     "quartile_adjacent",
     "quadratic_weighted_kappa",
+    "rank_quartile_exact",
+    "rank_quartile_adjacent",
+    "rank_quadratic_weighted_kappa",
 )
 
 
@@ -724,6 +861,7 @@ def experiment_block(
         "directory": str(experiment.directory),
         "code_revision": experiment.config.get("code_revision"),
         "planned_runs_per_puzzle": planned_repetitions(experiment.config),
+        "max_guesses": max_guesses(experiment.config),
         "puzzles": len(puzzles),
         "puzzles_with_all_planned_runs": sum(
             1 for p in puzzles if len(p.scores) >= p.planned_runs
@@ -731,10 +869,40 @@ def experiment_block(
         "attempts": experiment.attempts,
         "failed_attempts": sum(p.failed_attempts for p in puzzles),
         "fingerprints": experiment.fingerprints,
+        **score_metrics(puzzles, cut_points, seed, resamples),
+        "capped": {
+            f"{guesses}_guesses": score_metrics(
+                capped(experiment, guesses).puzzles, cut_points, seed, resamples
+            )
+            for guesses in capped_limits(experiment)
+        },
+    }
+
+
+def score_metrics(
+    puzzles: Sequence[PuzzleRuns],
+    cut_points: Sequence[float],
+    seed: int,
+    resamples: int,
+) -> dict[str, Any]:
+    """RQ1 and RQ2 with CIs for one reading of the scores."""
+
+    return {
         "rq1": consistency_metrics(puzzles),
         "rq1_bootstrap": stratified_bootstrap(
             puzzles, consistency_metrics, RQ1_BOOTSTRAP, seed, resamples
         ),
+        **rq2_metrics(puzzles, cut_points, seed, resamples),
+    }
+
+
+def rq2_metrics(
+    puzzles: Sequence[PuzzleRuns],
+    cut_points: Sequence[float],
+    seed: int,
+    resamples: int,
+) -> dict[str, Any]:
+    return {
         "rq2": alignment_metrics(puzzles, cut_points),
         "rq2_bootstrap": stratified_bootstrap(
             puzzles,
@@ -770,7 +938,8 @@ def analyse(
 
     for e in experiments:
         if planned_repetitions(e.config) >= MIN_RUNS_FOR_DISTRIBUTION:
-            rows = distribution_rows(e, seed, resamples)
+            # The human bins stop at 6 guesses, so longer games are capped.
+            rows = distribution_rows(capped(e, STANDARD_GUESSES), seed, resamples)
             distribution.extend(rows)
             blocks[e.name]["distribution"] = distribution_summary(rows)
         else:
@@ -785,32 +954,40 @@ def analyse(
     blockers = pooling_blockers(experiments)
     pooled = None
     if not blockers:
+        # Pooling requires equal settings, so both share one guess limit.
         puzzles = [p for e in experiments for p in e.puzzles]
         pooled = {
             "role": "robustness check for RQ2 mean alignment, not primary",
-            "rq2": alignment_metrics(puzzles, cut_points),
-            "rq2_bootstrap": stratified_bootstrap(
-                puzzles,
-                lambda sample: alignment_metrics(sample, cut_points),
-                RQ2_BOOTSTRAP,
-                seed,
-                resamples,
-            ),
+            **rq2_metrics(puzzles, cut_points, seed, resamples),
+            "capped": {
+                f"{guesses}_guesses": rq2_metrics(
+                    [p for e in experiments for p in capped(e, guesses).puzzles],
+                    cut_points,
+                    seed,
+                    resamples,
+                )
+                for guesses in capped_limits(experiments[0])
+            },
         }
 
     metrics = {
         "generated_at": datetime.now(UTC).isoformat(),
         "analysis": "pilot-02 P12-P13",
         "cut_points": list(cut_points),
-        "loss_score": LOSS_SCORE,
+        "loss_score": "max_guesses + 1 (7 at 6 guesses)",
         "experiments": blocks,
         "pooled": pooled,
         "pooling_blockers": blockers,
         "notes": [
             "RQ1 is descriptive in pilot-02; Exp A (deep) is its primary source.",
             "RQ2 primary source is Exp B (wide); Exp A is a check.",
-            "Human quartile is the frozen rank label; system quartile maps the "
-            "system mean by value with the frozen cut-points.",
+            "Human quartile is the frozen rank label. The system mean maps to "
+            "a quartile by value with the frozen cut-points, and by rank among "
+            "the puzzles at hand (rank_* metrics).",
+            "With more than 6 guesses, the top-level metrics use raw scores "
+            "(loss = max_guesses + 1). The capped block reads the same games "
+            "stopped at 6 guesses (the human scale) and at the sensitivity "
+            "limits. The distribution comparison uses the 6-guess scores.",
             "CIs resample puzzles within human quartiles; runs are never "
             "treated as independent puzzles.",
             "Distribution CIs resample runs within a puzzle; the human shares "
@@ -867,6 +1044,9 @@ def puzzle_rows(
     rows = []
     index = {label: position for position, label in enumerate(QUARTILE_LABELS)}
     for experiment in experiments:
+        scored = [p for p in experiment.puzzles if p.system_mean is not None]
+        rank_labels = system_rank_quartiles(scored) or []
+        rank_quartile = {p.puzzle_id: label for p, label in zip(scored, rank_labels)}
         for p in experiment.puzzles:
             mean = p.system_mean
             system_quartile = map_score(mean, cut_points) if mean is not None else None
@@ -889,12 +1069,14 @@ def puzzle_rows(
                     "win_rate": p.wins / runs if runs else None,
                     "system_mean": mean,
                     "system_sd": p.system_sd,
+                    "system_mean_6_guesses": cap_scores(p, STANDARD_GUESSES).system_mean,
                     "system_quartile": system_quartile,
                     "quartile_shift": (
                         index[system_quartile] - index[p.human_quartile]
                         if system_quartile
                         else None
                     ),
+                    "system_rank_quartile": rank_quartile.get(p.puzzle_id),
                     "mean_error": mean - p.human_mean if mean is not None else None,
                     "exact_match_rate": matches / pairs if pairs else None,
                     "mean_pairwise_abs_diff": difference / pairs if pairs else None,
@@ -962,10 +1144,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     for name, block in metrics["experiments"].items():
         rq1, rq2 = block["rq1"], block["rq2"]
         print(
-            f"{name}: {rq1['completed_runs']} runs, win rate {rq1['win_rate']}, "
-            f"mean within-SD {rq1['mean_within_sd']}, ICC(1,1) {rq1['icc_1_1']}, "
-            f"MAE {rq2['mae']}, QWK {rq2['quadratic_weighted_kappa']}"
+            f"{name} ({block['max_guesses']} guesses): {rq1['completed_runs']} runs, "
+            f"win rate {rq1['win_rate']}, mean within-SD {rq1['mean_within_sd']}, "
+            f"ICC(1,1) {rq1['icc_1_1']}, Spearman {rq2['spearman']}, "
+            f"Kendall {rq2['kendall_tau_b']}, rank QWK {rq2['rank_quadratic_weighted_kappa']}"
         )
+        for label, view in block["capped"].items():
+            capped_rq2 = view["rq2"]
+            print(
+                f"  capped at {label.replace('_', ' ')}: win rate {view['rq1']['win_rate']}, "
+                f"Spearman {capped_rq2['spearman']}, MAE {capped_rq2['mae']}, "
+                f"QWK {capped_rq2['quadratic_weighted_kappa']}"
+            )
         if block["distribution"]:
             print(f"  mean W1 {block['distribution']['mean_w1']}")
         check = block["personas"]["manipulation_check"]

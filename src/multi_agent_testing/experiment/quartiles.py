@@ -24,6 +24,12 @@ A system mean score has no puzzle id, so it is mapped by value with the cut
 
 With this rule a human puzzle mapped by value lands in its rank quartile
 except for the ``boundary_ties`` puzzles, which move up one quartile.
+
+Rank split (mapping system scores by rank)
+------------------------------------------
+A system that plays on another scale (for example with a 12-guess limit)
+is compared by rank instead: ``rank_split`` applies the same contiguous split
+to the system means of the puzzles at hand.
 """
 
 from collections.abc import Sequence
@@ -102,6 +108,30 @@ def assign_quartiles(
         boundary_ties=boundary_ties,
     )
     return labels, spec
+
+
+def rank_split(values: Sequence[float], tie_keys: Sequence[int]) -> list[str]:
+    """D1..D4 for each value by its rank within ``values``.
+
+    The same contiguous split as ``assign_quartiles``, for system means that
+    do not share the human scale. Ties on value are broken by ``tie_keys``
+    (puzzle ids) and then by position, so a bootstrap sample may repeat a
+    puzzle. Requires at least four values.
+    """
+
+    n = len(values)
+    if n < len(QUARTILE_LABELS):
+        raise ValueError("Need at least four values to form quartiles.")
+    if len(tie_keys) != n:
+        raise ValueError("Need one tie key per value.")
+
+    order = sorted(range(n), key=lambda i: (values[i], tie_keys[i], i))
+    labels = [""] * n
+    k = len(QUARTILE_LABELS)
+    for group, label in enumerate(QUARTILE_LABELS):
+        for position in order[group * n // k:(group + 1) * n // k]:
+            labels[position] = label
+    return labels
 
 
 def map_score(score: float, cut_points: Sequence[float]) -> str:

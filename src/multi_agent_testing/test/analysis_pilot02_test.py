@@ -14,8 +14,14 @@ from ..experiment.analysis_pilot02 import (
     Experiment,
     PuzzleRuns,
     alignment_metrics,
+    cap_scores,
+    capped,
     consistency_metrics,
+    distribution_rows,
+    experiment_block,
     icc_oneway,
+    kendall_tau_b,
+    load_fingerprints,
     pairwise_agreement,
     pooling_blockers,
     quadratic_weighted_kappa,
@@ -27,9 +33,17 @@ DATASET = REPO_ROOT / "src" / "data" / "raw" / "worldepuzzles.json"
 GUESSES = REPO_ROOT / "src" / "data" / "raw" / "allowed_guesses.txt"
 QUARTILES = REPO_ROOT / "src" / "data" / "processed" / "quartiles.json"
 CUTS = [3.98, 4.24, 4.53]
+QUARTILE_LABELS_FOR_TEST = ("D1", "D2", "D3", "D4")
 
 
-def puzzle(puzzle_id: str, quartile: str, human: float, scores: list[float]) -> PuzzleRuns:
+def puzzle(
+    puzzle_id: str,
+    quartile: str,
+    human: float,
+    scores: list[float],
+    loss: float = 7,
+    human_bins: tuple[float, ...] = (),
+) -> PuzzleRuns:
     return PuzzleRuns(
         experiment="test",
         puzzle_id=puzzle_id,
@@ -40,9 +54,10 @@ def puzzle(puzzle_id: str, quartile: str, human: float, scores: list[float]) -> 
         human_mean_high=None,
         planned_runs=len(scores),
         scores=tuple(scores),
-        wins=sum(1 for score in scores if score < 7),
-        losses=sum(1 for score in scores if score == 7),
+        wins=sum(1 for score in scores if score < loss),
+        losses=sum(1 for score in scores if score == loss),
         failed_attempts=0,
+        human_bins=human_bins,
     )
 
 
@@ -102,10 +117,80 @@ class AlignmentTests(unittest.TestCase):
         self.assertEqual(counts["D3"]["D1"], 1)
         self.assertEqual(result["quartile_recall"], {"D1": 0.0, "D2": 1.0, "D3": 0.0, "D4": 1.0})
 
+    def test_kendall_tau_b(self):
+        # One swapped pair out of six: (5 - 1) / 6.
+        self.assertAlmostEqual(kendall_tau_b([1, 2, 3, 4], [1, 3, 2, 4]) or 0, 4 / 6)
+        # One tie in x: (2 - 0) / sqrt((2 + 1) * 2).
+        self.assertAlmostEqual(kendall_tau_b([1, 1, 2], [1, 2, 3]) or 0, 2 / 6 ** 0.5)
+        self.assertIsNone(kendall_tau_b([4, 4], [1, 2]))
+        self.assertIsNone(kendall_tau_b([1], [1]))
+
+    def test_rank_quartiles_ignore_the_scale(self):
+        # The system is two guesses worse but keeps the human order.
+        puzzles = [
+            puzzle("1", "D1", 3.8, [6, 6]),
+            puzzle("2", "D2", 4.1, [7, 7]),
+            puzzle("3", "D3", 4.4, [8, 8]),
+            puzzle("4", "D4", 4.9, [9, 9]),
+        ]
+        result = alignment_metrics(puzzles, CUTS)
+
+        self.assertEqual(result["quartile_exact"], 0.25)  # by value everything is D4
+        self.assertEqual(result["rank_quartile_exact"], 1.0)
+        self.assertAlmostEqual(result["rank_quadratic_weighted_kappa"] or 0, 1.0)
+        self.assertAlmostEqual(result["spearman"] or 0, 1.0)
+        self.assertAlmostEqual(result["kendall_tau_b"] or 0, 1.0)
+
+    def test_rank_quartiles_need_four_puzzles(self):
+        result = alignment_metrics([puzzle(str(i), "D1", 4.0 + i / 10, [4 + i]) for i in range(3)], CUTS)
+
+        self.assertIsNone(result["rank_quartile_exact"])
+        self.assertIsNotNone(result["spearman"])
+
     def test_puzzles_without_completed_runs_are_left_out(self):
         result = alignment_metrics([puzzle("1", "D1", 3.8, []), puzzle("2", "D2", 4.1, [4])], CUTS)
 
         self.assertEqual(result["puzzles"], 1)
+
+
+class GuessLimitTests(unittest.TestCase):
+    def test_cap_scores(self):
+        # Wins at 3, 7 and 9, and a loss at the 12-guess limit (13).
+        raw = puzzle("1", "D2", 4.1, [3, 7, 9, 13], loss=13)
+        six = cap_scores(raw, 6)
+        eight = cap_scores(raw, 8)
+
+        self.assertEqual(six.scores, (3, 7, 7, 7))
+        self.assertEqual((six.wins, six.losses), (1, 3))
+        self.assertEqual(eight.scores, (3, 7, 9, 9))
+        self.assertEqual((eight.wins, eight.losses), (2, 2))
+
+    def experiment(self, max_guesses: int, scores: list[float]) -> Experiment:
+        config = {"settings": {"repetitions": len(scores), "max_guesses": max_guesses}}
+        bins = (0.0, 0.0, 0.25, 0.25, 0.25, 0.25, 0.0)
+        puzzles = tuple(
+            puzzle(str(i), q, 4.0 + i / 10, scores, loss=max_guesses + 1, human_bins=bins)
+            for i, q in enumerate(QUARTILE_LABELS_FOR_TEST)
+        )
+        return Experiment("deep", Path("deep"), config, puzzles, 4 * len(scores), {"fp": 1})
+
+    def test_capped_block_only_for_longer_games(self):
+        long_games = experiment_block(self.experiment(12, [4, 9, 13]), CUTS, seed=1, resamples=20)
+        standard = experiment_block(self.experiment(6, [4, 5, 7]), CUTS, seed=1, resamples=20)
+
+        self.assertEqual(long_games["max_guesses"], 12)
+        self.assertEqual(sorted(long_games["capped"]), ["6_guesses", "8_guesses"])
+        self.assertAlmostEqual(long_games["rq1"]["win_rate"], 2 / 3)
+        self.assertAlmostEqual(long_games["capped"]["6_guesses"]["rq1"]["win_rate"], 1 / 3)
+        self.assertEqual(standard["capped"], {})
+
+    def test_distribution_reads_six_guess_scores(self):
+        experiment = self.experiment(12, [4, 9, 13])
+
+        with self.assertRaises(ValueError):
+            distribution_rows(experiment, seed=1, resamples=10)  # 9 and 13 are no bins
+        rows = distribution_rows(capped(experiment, 6), seed=1, resamples=10)
+        self.assertAlmostEqual(rows[0]["system_p7"], 2 / 3)
 
 
 class BootstrapTests(unittest.TestCase):
@@ -144,6 +229,16 @@ class PoolingTests(unittest.TestCase):
 
     def test_identical_configurations_pool(self):
         self.assertEqual(pooling_blockers([self.experiment("deep", repetitions=32), self.experiment("wide")]), [])
+
+    def test_unanswered_calls_carry_no_fingerprint(self):
+        calls = [
+            {"system_fingerprint": "fp1"},
+            {"system_fingerprint": None, "error_type": "APITimeoutError"},  # no reply
+            {"system_fingerprint": None, "error_type": None},  # a reply without one
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "run.json").write_text(json.dumps({"calls": calls}), encoding="utf-8")
+            self.assertEqual(load_fingerprints(Path(tmp)), {"fp1": 1, "unknown": 1})
 
     def test_changed_setting_or_fingerprint_blocks_pooling(self):
         self.assertEqual(
