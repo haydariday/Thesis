@@ -262,6 +262,27 @@ vB won every game in 3 or 4 guesses, so it barely separates the quartiles (`runs
 
 The run rules of 6.1 apply. Wide (about 1 hour with 4 workers) and deep (about 2.5 hours) run back to back from the tag, off-peak only. The command is the 6.1 command with `--max-guesses 12 --max-repairs 2 --workers 4` and the vA output dirs. `--max-seconds` is not needed, since the runner pauses for peak hours on its own.
 
+### 6.3 Configuration vB (tag `pilot-02-vb-frozen`, 2026-10-21)
+
+vB asks whether DeepSeek's thinking mode makes a better playtester. It differs from vA only in thinking and in the guess limit. It is a second configuration and never pools with vA.
+
+| Item | vB value (changes from vA in bold) |
+|---|---|
+| Sampling | **thinking `enabled`, `--reasoning-effort low`**, no temperature (thinking ignores it), **`max_tokens=4096`**, JSON mode on |
+| Guess limit | **`--max-guesses 6`**, the human limit. Agents never see it, as in vA. A loss scores 7. |
+| Debate, requests, workers | as vA: preset `pilot-02`, `max_rounds=3`, `max_repairs=2`, `max_attempts_per_unit=2`, `--workers 4` |
+| Source | `source_sha256` `9f8e496a4da1677e260274581f41a891d77705f7c4d2ad4322c3cea4097b0af2` |
+| Data, manifests, human data | as in 6.1 |
+| Output | `experiments/pilot-02-vb-wide`; `experiments/pilot-02-vb-deep` only if deep is run later from the same tag |
+
+**Why 6 guesses.** In the 24 vB games so far (`runs/smoke-vB-*`, `runs/workers-check-v2`) no game needed more than 5 guesses, so a handicap adds nothing. At 6 guesses every vB score is already on the human scale. Because the limit is hidden, a vA game capped at 6 is the game vA would have played under a 6-guess limit.
+
+**Comparison rule (fixed before any vB wide data).** vA and vB are compared on the wide manifest, puzzle by puzzle, on the 6-guess scale: vA's `capped.6_guesses` block against vB's results. The measures are Spearman ρ, Kendall τ, rank-based D1–D4, MAE and signed error. vA's raw 12-guess ranking stays its own primary result and is not set against vB.
+
+**Expectations from the 24 vB games** (old fingerprint `aeb56401…`, 8 puzzles): every game won, scores of 3 to 5, mean about 0.8 guesses below humans, within-puzzle SD about 0.5, ICC(1,1) about 0.34, ρ about 0.3. The risk is many tied puzzle means, which weakens the rank measures.
+
+**Scope and cost.** Wide first: 144 games, about $8 off-peak and about 7 hours with 4 workers. Deep (384 games, about $22) follows only if the wide result calls for it, from the same tag and with no source change in between, so that the two can be pooled.
+
 ## 7. Analysis
 
 A new `experiment/analysis_pilot02.py` reads both experiment directories and writes CSV and JSON outputs. Like the current `analysis.py`, it uses only the standard library.
