@@ -209,7 +209,7 @@ HUMAN_COLOUR = "#9A9A9A"
 INK = "#1A1A1A"
 MUTED_INK = "#555555"
 GRID = "#E6E6E6"
-FAIL_SCORE_6 = 7
+STANDARD_LIMIT = 6  # Wordle guess limit
 
 
 class Analysis:
@@ -246,23 +246,6 @@ def _quartile_scatter(ax, xs, ys, quartiles, size: float = 16) -> None:
             )
 
 
-def _quartile_legend(ax, **kwargs) -> None:
-    handles = [
-        plt.Line2D([], [], marker="o", linestyle="", markersize=4.5,
-                   markerfacecolor=QUARTILE_COLOURS[q], markeredgecolor=INK,
-                   markeredgewidth=0.4)
-        for q in QUARTILE_LABELS
-    ]
-    ax.legend(handles, [f"Human {q}" for q in QUARTILE_LABELS], frameon=False,
-              handletextpad=0.2, borderaxespad=0.2, **kwargs)
-
-
-def _ci_text(value: dict | None) -> str:
-    if not value:
-        return "n/a"
-    return f"{value['point']:.2f} [{value['ci_low']:.2f}, {value['ci_high']:.2f}]"
-
-
 def _average_ranks(values: list[float]) -> list[float]:
     order = sorted(range(len(values)), key=lambda i: values[i])
     ranks = [0.0] * len(values)
@@ -275,6 +258,34 @@ def _average_ranks(values: list[float]) -> list[float]:
             ranks[order[k]] = (i + j) / 2 + 1
         i = j + 1
     return ranks
+
+
+# Figures carry no titles or notes: panel letters, axes and legends only.
+# Numbers and interpretation belong in the caption (figures/README.md).
+
+
+def _quartile_handles() -> list:
+    return [
+        plt.Line2D([], [], marker="o", linestyle="", markersize=4.5,
+                   markerfacecolor=QUARTILE_COLOURS[q], markeredgecolor=INK,
+                   markeredgewidth=0.4)
+        for q in QUARTILE_LABELS
+    ]
+
+
+def _line_handle(**style) -> plt.Line2D:
+    return plt.Line2D([], [], **style)
+
+
+DASHED = {"color": MUTED_INK, "linestyle": (0, (3, 2)), "linewidth": 0.7}
+
+
+def _top_legend(target, handles, labels, ncol: int, **kwargs) -> None:
+    """A legend row above the plot, where it cannot cover data."""
+
+    target.legend(handles, labels, loc="lower left", bbox_to_anchor=(0, 1.01), ncol=ncol,
+                  frameon=False, handletextpad=0.3, columnspacing=1.0, borderaxespad=0,
+                  **kwargs)
 
 
 def figure_f2(analysis: Analysis, output_dir: Path) -> list[Path]:
@@ -290,11 +301,7 @@ def figure_f2(analysis: Analysis, output_dir: Path) -> list[Path]:
 
     _style()
     fig, ax = plt.subplots(figsize=(IEEE_DOUBLE_COLUMN_IN, 2.9))
-    ax.axhspan(0.5, 6.5, color="#F3F6FA", zorder=0)
-    ax.axhline(6.5, color=MUTED_INK, linestyle=(0, (3, 2)), linewidth=0.7, zorder=1)
-    # Labelled outside the plot, where no game can sit under it.
-    ax.text(len(puzzles) - 0.3, 6.5, "Wordle\nlimit (6)", ha="left", va="center",
-            fontsize=6.5, color=MUTED_INK, clip_on=False)
+    ax.axhline(STANDARD_LIMIT + 0.5, zorder=1, **DASHED)
 
     for x, row in enumerate(puzzles):
         values = sorted(scores.get(row["puzzle_id"], []))
@@ -312,57 +319,47 @@ def figure_f2(analysis: Analysis, output_dir: Path) -> list[Path]:
                    edgecolor=INK, linewidth=0.8, zorder=5)
 
     ax.set_xticks(range(len(puzzles)))
-    ax.set_xticklabels(
-        [f"{r['answer']}\n{r['human_quartile']} {float(r['human_mean']):.2f}" for r in puzzles],
-        fontsize=6.5,
-    )
+    ax.set_xticklabels([f"{r['answer']}\n{r['human_quartile']}" for r in puzzles], fontsize=6.5)
     for tick, row in zip(ax.get_xticklabels(), puzzles):
         tick.set_color(QUARTILE_TEXT_COLOURS[row["human_quartile"]])
     ax.set_xlim(-0.6, len(puzzles) - 0.4)
     ax.set_ylim(0.5, limit + 1.5)
     ax.set_yticks(range(1, limit + 2))
     ax.set_yticklabels([str(k) for k in range(1, limit + 1)] + ["Fail"])
-    ax.set_ylabel(f"Guesses used ({limit}-guess limit)")
-    ax.set_xlabel("Deep puzzles, ordered by human mean (answer, human quartile and mean)")
+    ax.set_ylabel("Guesses used")
+    ax.set_xlabel("Deep puzzle (ordered by human mean)")
     ax.yaxis.grid(True, color=GRID, linewidth=0.5, zorder=0)
-    rq1 = block["rq1_bootstrap"]
-    ax.set_title(
-        f"Run-to-run spread, 32 games per puzzle. Within-puzzle SD {_ci_text(rq1['mean_within_sd'])}; "
-        f"ICC(1,1) {_ci_text(rq1['icc_1_1'])}",
-        loc="left", pad=16,
+    _top_legend(
+        ax,
+        [
+            *_quartile_handles(),
+            _line_handle(color=INK, linewidth=1.4),
+            _line_handle(marker="D", linestyle="", markersize=4, markerfacecolor="white",
+                         markeredgecolor=INK),
+            _line_handle(**DASHED),
+        ],
+        [*(f"Game, human {q}" for q in QUARTILE_LABELS), "Human mean", "System mean",
+         "6-guess limit"],
+        ncol=4,
     )
-    handles = [
-        plt.Line2D([], [], color=INK, linewidth=1.4),
-        plt.Line2D([], [], marker="D", linestyle="", markersize=4, markerfacecolor="white",
-                   markeredgecolor=INK),
-        plt.Line2D([], [], marker="o", linestyle="", markersize=3.5,
-                   markerfacecolor=QUARTILE_COLOURS["D2"], markeredgecolor=INK,
-                   markeredgewidth=0.3),
-    ]
-    ax.legend(handles, ["Human mean", "System mean", "One game (colour = human quartile)"],
-              loc="lower left", bbox_to_anchor=(0, 0.99), ncol=3, frameon=False,
-              handletextpad=0.3, columnspacing=1.0, borderaxespad=0)
     return _save(fig, output_dir, "F2_run_to_run_spread")
 
 
 def figure_f3(analysis: Analysis, output_dir: Path) -> list[Path]:
     """F3 (RQ2 distribution): human and system 7-bin shares per deep puzzle."""
 
-    rows = sorted(
-        (r for r in analysis.distribution if r["experiment"] == "deep"),
-        key=lambda r: next(
-            float(p["human_mean"]) for p in analysis.puzzles
-            if p["experiment"] == "deep" and p["puzzle_id"] == r["puzzle_id"]
-        ),
-    )
     human_mean = {
         p["puzzle_id"]: float(p["human_mean"]) for p in analysis.puzzles if p["experiment"] == "deep"
     }
+    rows = sorted(
+        (r for r in analysis.distribution if r["experiment"] == "deep"),
+        key=lambda r: human_mean[r["puzzle_id"]],
+    )
     columns = 4
     lines = (len(rows) + columns - 1) // columns
 
     _style()
-    fig, axes = plt.subplots(lines, columns, figsize=(IEEE_DOUBLE_COLUMN_IN, 1.32 * lines + 0.35),
+    fig, axes = plt.subplots(lines, columns, figsize=(IEEE_DOUBLE_COLUMN_IN, 1.32 * lines + 0.3),
                              sharex=True, sharey=True,
                              gridspec_kw={"hspace": 0.55, "wspace": 0.12})
     flat = list(axes.flat)
@@ -372,34 +369,24 @@ def figure_f3(analysis: Analysis, output_dir: Path) -> list[Path]:
         system = [float(row[f"system_p{k}"]) for k in bins]
         ax.bar([k - 0.19 for k in bins], human, width=0.36, color=HUMAN_COLOUR, linewidth=0)
         ax.bar([k + 0.19 for k in bins], system, width=0.36, color=SYSTEM_COLOUR, linewidth=0)
-        ax.set_title(
-            f"{row['answer']}  {row['human_quartile']} {human_mean[row['puzzle_id']]:.2f}",
-            loc="left", fontsize=7, color=QUARTILE_TEXT_COLOURS[row["human_quartile"]],
-            fontweight="bold", pad=2,
-        )
-        ax.text(0.98, 0.95, f"W1 {float(row['w1']):.2f}", transform=ax.transAxes, ha="right",
-                va="top", fontsize=6.5, color=INK)
+        ax.set_title(f"{row['answer']} ({row['human_quartile']})", loc="left", fontsize=7,
+                     color=QUARTILE_TEXT_COLOURS[row["human_quartile"]], fontweight="bold",
+                     pad=2)
         ax.yaxis.grid(True, color=GRID, linewidth=0.5)
         ax.set_axisbelow(True)
     for ax in flat[len(rows):]:
         ax.set_visible(False)
-    flat[0].set_ylim(0, 1.15)  # headroom for the W1 label
+    flat[0].set_ylim(0, 1)
     flat[0].set_yticks([0, 0.5, 1])
     flat[0].set_yticklabels(["0", "50", "100"])
     for ax in flat:
         ax.set_xticks(list(bins))
         ax.set_xticklabels(BIN_LABELS, fontsize=6)
     fig.supylabel("Share of games (%)", fontsize=8, x=0.06)
-    fig.supxlabel("Guesses (6-guess scale; anything later counts as Fail)", fontsize=8, y=0.03)
-    summary = analysis.block("deep")["distribution"]
-    handles = [Patch(facecolor=HUMAN_COLOUR), Patch(facecolor=SYSTEM_COLOUR)]
-    fig.legend(handles, ["Human", "System (32 games)"], loc="upper left", ncol=2, frameon=False,
-               bbox_to_anchor=(0.115, 0.975), handlelength=1.0)
-    fig.suptitle(
-        f"Guess-count distributions, deep puzzles. Mean W1 {summary['mean_w1']:.2f}; "
-        f"split-half W1 {summary['mean_split_half_w1']:.2f}",
-        x=0.125, ha="left", fontsize=8.5, y=0.995,
-    )
+    fig.supxlabel("Guesses", fontsize=8, y=0.03)
+    fig.legend([Patch(facecolor=HUMAN_COLOUR), Patch(facecolor=SYSTEM_COLOUR)],
+               ["Human", "System"], loc="upper left", ncol=2, frameon=False,
+               bbox_to_anchor=(0.115, 1.0), handlelength=1.0)
     return _save(fig, output_dir, "F3_distribution_comparison")
 
 
@@ -418,10 +405,8 @@ def figure_f4(analysis: Analysis, output_dir: Path) -> list[Path]:
     _style()
     fig, ax = plt.subplots(figsize=(IEEE_SINGLE_COLUMN_IN, 3.0))
     ys = list(range(len(rows)))[::-1]
-    floor = summary["mean_split_half_random_w1"]
-    ax.axvspan(0, floor, color="#F0F0F0", zorder=0)
-    ax.text(floor / 2, len(rows) - 0.35, "run-to-run\nnoise", ha="center", va="bottom",
-            fontsize=6, color=MUTED_INK)
+    noise = "#E8E8E8"
+    ax.axvspan(0, summary["mean_split_half_random_w1"], color=noise, zorder=0)
     for y, row in zip(ys, rows):
         colour = QUARTILE_COLOURS[row["human_quartile"]]
         ax.plot([float(row["w1_ci_low"]), float(row["w1_ci_high"])], [y, y], color=INK,
@@ -433,11 +418,20 @@ def figure_f4(analysis: Analysis, output_dir: Path) -> list[Path]:
     for tick, row in zip(ax.get_yticklabels(), rows):
         tick.set_color(QUARTILE_TEXT_COLOURS[row["human_quartile"]])
     ax.set_xlim(0, None)
-    ax.set_ylim(-0.7, len(rows) + 0.6)
-    ax.set_xlabel("Wasserstein-1 distance to humans (guesses), 95% CI")
+    ax.set_ylim(-0.7, len(rows) - 0.3)
+    ax.set_xlabel("W1 distance to humans (guesses)")
     ax.xaxis.grid(True, color=GRID, linewidth=0.5)
     ax.set_axisbelow(True)
-    ax.set_title(f"Distribution distance per puzzle, mean W1 {summary['mean_w1']:.2f}", loc="left")
+    _top_legend(
+        ax,
+        [
+            _line_handle(color=INK, linewidth=0.9, marker="o", markersize=4.5,
+                         markerfacecolor="white", markeredgecolor=INK),
+            Patch(facecolor=noise),
+        ],
+        ["W1 with 95% CI", "Split-half W1"],
+        ncol=2,
+    )
     return _save(fig, output_dir, "F4_w1_forest")
 
 
@@ -445,54 +439,48 @@ def figure_f5(analysis: Analysis, output_dir: Path) -> list[Path]:
     """F5 (RQ2 mean and rank): wide puzzles on the 6-guess scale and by rank."""
 
     rows = analysis.puzzle_rows("wide")
-    block = analysis.block("wide")
-    six = block["capped"]["6_guesses"]["rq2_bootstrap"]
-    raw = block["rq2_bootstrap"]
     cuts = analysis.metrics["cut_points"]
     human = [float(r["human_mean"]) for r in rows]
     system6 = [float(r["system_mean_6_guesses"]) for r in rows]
     quartiles = [r["human_quartile"] for r in rows]
 
     _style()
-    fig, (ax_a, ax_b) = plt.subplots(1, 2, figsize=(IEEE_DOUBLE_COLUMN_IN, 3.05),
+    fig, (ax_a, ax_b) = plt.subplots(1, 2, figsize=(IEEE_DOUBLE_COLUMN_IN, 2.9),
                                      gridspec_kw={"wspace": 0.3})
 
     low, high = 3.4, 7.0
-    ax_a.plot([low, high], [low, high], color=MUTED_INK, linestyle=(0, (3, 2)), linewidth=0.7)
-    ax_a.text(6.2, 6.0, "y = x", fontsize=6.5, color=MUTED_INK, rotation=38)
+    ax_a.plot([low, high], [low, high], **DASHED)
     for cut in cuts:
         ax_a.axvline(cut, color=GRID, linewidth=0.8, zorder=0)
+        ax_a.axhline(cut, color=GRID, linewidth=0.8, zorder=0)
     _quartile_scatter(ax_a, human, system6, quartiles)
     ax_a.set_xlim(low, 5.2)
-    ax_a.set_ylim(low, high + 0.75)  # headroom keeps the text clear of the points
-    ax_a.set_yticks([3.5, 4.0, 4.5, 5.0, 5.5, 6.0, 6.5, 7.0])
+    ax_a.set_ylim(low, high + 0.15)
     ax_a.set_xlabel("Human mean score")
-    ax_a.set_ylabel("System mean score, 6-guess scale")
-    ax_a.set_title("(a) Level: system plays worse than humans", loc="left")
-    ax_a.text(0.03, 0.97,
-              f"Bias {_ci_text(six['signed_error'])}\nMAE {_ci_text(six['mae'])}",
-              transform=ax_a.transAxes, va="top", fontsize=6.5, color=INK)
-    _quartile_legend(ax_a, loc="lower right", fontsize=6.5)
+    ax_a.set_ylabel("System mean score (6 guesses)")
+    ax_a.set_title("(a)", loc="left")
 
     human_rank = _average_ranks(human)
     system_rank = _average_ranks([float(r["system_mean"]) for r in rows])
     n = len(rows)
-    ax_b.plot([1, n], [1, n], color=MUTED_INK, linestyle=(0, (3, 2)), linewidth=0.7)
+    ax_b.plot([1, n], [1, n], **DASHED)
     for boundary in (n / 4 + 0.5, n / 2 + 0.5, 3 * n / 4 + 0.5):
         ax_b.axvline(boundary, color=GRID, linewidth=0.8, zorder=0)
         ax_b.axhline(boundary, color=GRID, linewidth=0.8, zorder=0)
     _quartile_scatter(ax_b, human_rank, system_rank, quartiles)
     ax_b.set_xlim(0, n + 1)
-    ax_b.set_ylim(0, n * 1.22)
+    ax_b.set_ylim(0, n + 1)
     ax_b.set_yticks(range(0, n + 1, 10))
     ax_b.set_xlabel("Human rank (1 = easiest)")
-    ax_b.set_ylabel(f"System rank, raw {block['max_guesses']}-guess scores")
-    ax_b.set_title("(b) Order: primary RQ2 measure", loc="left")
-    ax_b.text(0.03, 0.97,
-              f"Spearman ρ {_ci_text(raw['spearman'])}\nKendall τ {_ci_text(raw['kendall_tau_b'])}",
-              transform=ax_b.transAxes, va="top", fontsize=6.5, color=INK)
-    fig.suptitle(f"Wide puzzles (n = {n}, 3 games each). Grid lines mark D1–D4 boundaries.",
-                 x=0.125, ha="left", fontsize=7.5, color=MUTED_INK, y=1.0)
+    ax_b.set_ylabel("System rank")
+    ax_b.set_title("(b)", loc="left")
+
+    fig.legend(
+        [*_quartile_handles(), _line_handle(**DASHED), _line_handle(color=GRID, linewidth=1.2)],
+        [*(f"Human {q}" for q in QUARTILE_LABELS), "y = x", "D1–D4 boundary"],
+        loc="lower left", bbox_to_anchor=(0.11, 0.97), ncol=6, frameon=False,
+        handletextpad=0.3, columnspacing=1.0,
+    )
     return _save(fig, output_dir, "F5_mean_and_rank_alignment")
 
 
@@ -506,33 +494,27 @@ def figure_f6(analysis: Analysis, output_dir: Path) -> list[Path]:
     averages = [(s + h) / 2 for s, h in zip(system, human)]
     bias = sum(differences) / len(differences)
     sd = (sum((d - bias) ** 2 for d in differences) / (len(differences) - 1)) ** 0.5
-    limits = (bias - 1.96 * sd, bias + 1.96 * sd)
 
     _style()
-    fig, ax = plt.subplots(figsize=(IEEE_SINGLE_COLUMN_IN, 2.6))
+    fig, ax = plt.subplots(figsize=(IEEE_SINGLE_COLUMN_IN, 2.7))
     ax.axhline(0, color=GRID, linewidth=0.8, zorder=0)
     ax.axhline(bias, color=INK, linewidth=0.9)
-    for limit in limits:
-        ax.axhline(limit, color=MUTED_INK, linestyle=(0, (3, 2)), linewidth=0.7)
+    for limit in (bias - 1.96 * sd, bias + 1.96 * sd):
+        ax.axhline(limit, **DASHED)
     _quartile_scatter(ax, averages, differences, [r["human_quartile"] for r in rows], size=14)
-    # Line labels sit just outside the right edge, clear of the lines.
-    edge = ax.get_yaxis_transform()
-    ax.text(1.01, bias, f"bias {bias:+.2f}", transform=edge, va="center", fontsize=6.5,
-            color=INK, clip_on=False)
-    ax.text(1.01, limits[1], f"+1.96 SD\n{limits[1]:+.2f}", transform=edge, va="center",
-            fontsize=6.5, color=MUTED_INK, clip_on=False)
-    ax.text(1.01, limits[0], f"−1.96 SD\n{limits[0]:+.2f}", transform=edge, va="center",
-            fontsize=6.5, color=MUTED_INK, clip_on=False)
     ax.set_xlim(min(averages) - 0.1, max(averages) + 0.1)
     ax.set_xlabel("Mean of system and human score")
     ax.set_ylabel("System − human (guesses)")
-    ax.set_title("Agreement on the 6-guess scale, wide puzzles", loc="left", pad=14)
-    _quartile_legend(ax, loc="lower left", bbox_to_anchor=(0, 0.99), fontsize=6, ncol=4,
-                     columnspacing=0.6)
+    _top_legend(
+        ax,
+        [*_quartile_handles(), _line_handle(color=INK, linewidth=0.9), _line_handle(**DASHED)],
+        [*(f"Human {q}" for q in QUARTILE_LABELS), "Mean difference", "95% limits of agreement"],
+        ncol=3, fontsize=6.5,
+    )
     return _save(fig, output_dir, "F6_bland_altman")
 
 
-def _confusion_panel(ax, matrix: dict, title: str, note: str) -> None:
+def _confusion_panel(ax, matrix: dict, letter: str, system_axis: str) -> None:
     counts = matrix["counts"]
     size = len(QUARTILE_LABELS)
     values = [[counts[h][s] for s in QUARTILE_LABELS] for h in QUARTILE_LABELS]
@@ -553,159 +535,138 @@ def _confusion_panel(ax, matrix: dict, title: str, note: str) -> None:
     ax.set_yticklabels(QUARTILE_LABELS)
     for tick, label in zip(ax.get_yticklabels(), QUARTILE_LABELS):
         tick.set_color(QUARTILE_TEXT_COLOURS[label])
-    ax.set_xlabel("System quartile")
+    ax.set_xlabel(system_axis)
     ax.set_ylabel("Human quartile")
     ax.tick_params(length=0)
     for spine in ax.spines.values():
         spine.set_visible(False)
-    ax.set_title(title, loc="left")
-    ax.text(0.0, -0.24, note, transform=ax.transAxes, fontsize=6.5, color=INK, va="top")
+    ax.set_title(letter, loc="left")
 
 
 def figure_f7(analysis: Analysis, output_dir: Path) -> list[Path]:
     """F7 (RQ2 D1-D4): wide quartiles by value (6-guess) and by rank (raw)."""
 
     block = analysis.block("wide")
-    six = block["capped"]["6_guesses"]
-    raw = block
 
     _style()
-    fig, (ax_a, ax_b) = plt.subplots(1, 2, figsize=(IEEE_DOUBLE_COLUMN_IN, 2.75),
+    fig, (ax_a, ax_b) = plt.subplots(1, 2, figsize=(IEEE_DOUBLE_COLUMN_IN, 2.5),
                                      gridspec_kw={"wspace": 0.45})
-    boot6, boot = six["rq2_bootstrap"], raw["rq2_bootstrap"]
-    _confusion_panel(
-        ax_a, six["rq2"]["confusion_matrix"],
-        "(a) By value: frozen cut-points, 6-guess scale",
-        f"Exact {_ci_text(boot6['quartile_exact'])}\nQWK {_ci_text(boot6['quadratic_weighted_kappa'])}",
-    )
-    _confusion_panel(
-        ax_b, raw["rq2"]["rank_confusion_matrix"],
-        "(b) By rank: primary RQ2 measure",
-        f"Exact {_ci_text(boot['rank_quartile_exact'])}\nQWK {_ci_text(boot['rank_quadratic_weighted_kappa'])}",
-    )
+    _confusion_panel(ax_a, block["capped"]["6_guesses"]["rq2"]["confusion_matrix"], "(a)",
+                     "System quartile (cut-points)")
+    _confusion_panel(ax_b, block["rq2"]["rank_confusion_matrix"], "(b)",
+                     "System quartile (rank)")
     return _save(fig, output_dir, "F7_quartile_confusion")
+
+
+def _paired_bars(ax, groups: list[str], values: dict[str, list[float]], shades: dict) -> None:
+    for offset, name in zip((-0.19, 0.19), values):
+        bars = ax.bar([k + offset for k in range(len(groups))], values[name], width=0.36,
+                      color=shades[name])
+        ax.bar_label(bars, labels=[f"{v * 100:.0f}" for v in values[name]], fontsize=6,
+                     padding=1.5, color=INK)
+    ax.set_xticks(range(len(groups)))
+    ax.set_ylim(0, 1)
+    ax.set_yticks([0, 0.25, 0.5, 0.75, 1])
+    ax.set_yticklabels(["0", "25", "50", "75", "100"])
+    ax.yaxis.grid(True, color=GRID, linewidth=0.5)
+    ax.set_axisbelow(True)
+
+
+EXPERIMENT_SHADES = {"deep": SYSTEM_COLOUR, "wide": "#7FB8DA"}
 
 
 def figure_f8(analysis: Analysis, output_dir: Path) -> list[Path]:
     """F8 (personas): GM retention, advisor adoption and non-candidate shares."""
 
-    experiments = ("deep", "wide")
-    shades = {"deep": SYSTEM_COLOUR, "wide": "#7FB8DA"}
     rows = {(r["experiment"], r["agent"]): r for r in analysis.personas}
     advisors = [r["agent"] for r in analysis.personas if r["experiment"] == "deep" and r["agent"] != "gm"]
 
     _style()
-    fig, (ax_a, ax_b) = plt.subplots(1, 2, figsize=(IEEE_DOUBLE_COLUMN_IN, 2.5),
+    fig, (ax_a, ax_b) = plt.subplots(1, 2, figsize=(IEEE_DOUBLE_COLUMN_IN, 2.45),
                                      gridspec_kw={"width_ratios": [1.3, 1.0], "wspace": 0.3})
     groups = ["gm", *advisors]
-    labels = ["GM keeps\nown guess", *(f"{a.capitalize()}\nadopted" for a in advisors)]
-    for offset, name in zip((-0.19, 0.19), experiments):
-        values = [float(rows[(name, g)]["rate"]) for g in groups]
-        bars = ax_a.bar([k + offset for k in range(len(groups))], values, width=0.36,
-                        color=shades[name], label=name.capitalize())
-        ax_a.bar_label(bars, labels=[f"{v * 100:.0f}" for v in values], fontsize=6, padding=1.5,
-                       color=INK)
-    ax_a.set_xticks(range(len(groups)))
-    ax_a.set_xticklabels(labels, fontsize=6.5)
-    ax_a.set_ylim(0, 1)
-    ax_a.set_yticks([0, 0.25, 0.5, 0.75, 1])
-    ax_a.set_yticklabels(["0", "25", "50", "75", "100"])
+    _paired_bars(ax_a, groups,
+                 {e: [float(rows[(e, g)]["rate"]) for g in groups] for e in EXPERIMENT_SHADES},
+                 EXPERIMENT_SHADES)
+    ax_a.set_xticklabels(["GM keeps\nown guess", *(f"{a.capitalize()}\nadopted" for a in advisors)],
+                         fontsize=6.5)
     ax_a.set_ylabel("Share of turns (%)")
-    ax_a.set_title("(a) Whose guess is played", loc="left")
-    ax_a.yaxis.grid(True, color=GRID, linewidth=0.5)
-    ax_a.set_axisbelow(True)
-    ax_a.legend(frameon=False, loc="upper right", ncol=2)
+    ax_a.set_title("(a)", loc="left")
 
-    for offset, name in zip((-0.19, 0.19), experiments):
-        values = [float(rows[(name, a)]["non_candidate_share"]) for a in advisors]
-        bars = ax_b.bar([k + offset for k in range(len(advisors))], values, width=0.36,
-                        color=shades[name])
-        ax_b.bar_label(bars, labels=[f"{v * 100:.0f}" for v in values], fontsize=6, padding=1.5,
-                       color=INK)
-    ax_b.set_xticks(range(len(advisors)))
+    _paired_bars(ax_b, advisors,
+                 {e: [float(rows[(e, a)]["non_candidate_share"]) for a in advisors]
+                  for e in EXPERIMENT_SHADES},
+                 EXPERIMENT_SHADES)
     ax_b.set_xticklabels([a.capitalize() for a in advisors])
-    ax_b.set_ylim(0, 1)
-    ax_b.set_yticks([0, 0.25, 0.5, 0.75, 1])
-    ax_b.set_yticklabels(["0", "25", "50", "75", "100"])
-    ax_b.set_ylabel("Suggestions that cannot win (%)")
-    ax_b.set_title("(b) Non-candidate suggestions, turn 2 on", loc="left")
-    ax_b.yaxis.grid(True, color=GRID, linewidth=0.5)
-    ax_b.set_axisbelow(True)
-    check = analysis.block("deep")["personas"]["manipulation_check"]
-    ax_b.text(0.02, 0.97,
-              f"Cautious − Bold, deep: {check['point'] * 100:.1f} pts\n"
-              f"[{check['ci_low'] * 100:.1f}, {check['ci_high'] * 100:.1f}]",
-              transform=ax_b.transAxes, va="top", fontsize=6.5, color=INK)
+    ax_b.set_ylabel("Non-candidate suggestions (%)")
+    ax_b.set_title("(b)", loc="left")
+
+    fig.legend([Patch(facecolor=c) for c in EXPERIMENT_SHADES.values()],
+               [e.capitalize() for e in EXPERIMENT_SHADES], loc="lower left",
+               bbox_to_anchor=(0.11, 0.96), ncol=2, frameon=False, handlelength=1.0)
     return _save(fig, output_dir, "F8_persona_behaviour")
 
 
 def figure_f9(analysis: Analysis, output_dir: Path) -> list[Path]:
     """F9 (supporting): time and tokens per game, and attempt outcomes."""
 
-    experiments = ("deep", "wide")
-    shades = {"deep": SYSTEM_COLOUR, "wide": "#7FB8DA"}
+    experiments = tuple(EXPERIMENT_SHADES)
     completed = [r for r in analysis.runs if r["status"] == "completed"]
 
     _style()
-    fig, (ax_a, ax_b, ax_c) = plt.subplots(1, 3, figsize=(IEEE_DOUBLE_COLUMN_IN, 2.35),
+    fig, (ax_a, ax_b, ax_c) = plt.subplots(1, 3, figsize=(IEEE_DOUBLE_COLUMN_IN, 2.3),
                                            gridspec_kw={"wspace": 0.38})
     seconds = {e: [float(r["elapsed_seconds"]) for r in completed if r["experiment"] == e]
                for e in experiments}
     tokens = {e: [(int(r["prompt_tokens"]) + int(r["completion_tokens"])) / 1000
                   for r in completed if r["experiment"] == e] for e in experiments}
-    for ax, data, label, title in (
-        (ax_a, seconds, "Seconds per game (4 games in parallel)", "(a) Time per game"),
-        (ax_b, tokens, "Thousand tokens per game", "(b) Tokens per game"),
+    for ax, data, label, letter in (
+        (ax_a, seconds, "Seconds per game", "(a)"),
+        (ax_b, tokens, "Thousand tokens per game", "(b)"),
     ):
         everything = sorted(v for values in data.values() for v in values)
         # The axis stops at the 99th percentile so rare stalls do not flatten
-        # the histogram; the games beyond it are counted in a note.
+        # the histogram (the caption gives the count beyond it).
         top = everything[int(len(everything) * 0.99)]
         edges = [everything[0] + i * (top - everything[0]) / 24 for i in range(25)]
         ax.hist([[v for v in data[e] if v <= top] for e in experiments], bins=edges,
-                stacked=True, color=[shades[e] for e in experiments], edgecolor="white",
-                linewidth=0.3, label=[e.capitalize() for e in experiments])
-        median = everything[len(everything) // 2]
-        ax.axvline(median, color=INK, linewidth=0.8)
-        ax.text(median, ax.get_ylim()[1] * 0.97, f" median {median:.0f}", fontsize=6.5,
-                va="top", color=INK)
-        beyond = sum(1 for v in everything if v > top)
-        if beyond:
-            ax.text(0.98, 0.6, f"{beyond} games above\n{top:.0f} not shown", transform=ax.transAxes,
-                    ha="right", fontsize=6, color=MUTED_INK)
+                stacked=True, color=[EXPERIMENT_SHADES[e] for e in experiments],
+                edgecolor="white", linewidth=0.3)
+        ax.axvline(everything[len(everything) // 2], color=INK, linewidth=0.8)
         ax.set_xlabel(label)
         ax.set_ylabel("Games")
-        ax.set_title(title, loc="left")
-    ax_a.legend(frameon=False, loc="center right", fontsize=6.5)
+        ax.set_title(letter, loc="left")
 
     # A "running" file is a game abandoned when the runner process stopped.
-    outcomes = ("completed", "RepairExhausted", "APITimeoutError", "running", "other")
-    counts = {e: {o: 0 for o in outcomes} for e in experiments}
-    for row in analysis.runs:
-        outcome = row["status"] if row["status"] in ("completed", "running") else row["error_type"]
-        counts[row["experiment"]][outcome if outcome in outcomes else "other"] += 1
-    failures = tuple(o for o in outcomes[1:] if any(counts[e][o] for e in experiments))
+    outcomes = ("RepairExhausted", "APITimeoutError", "running", "other")
     names = {
         "RepairExhausted": "Repair\nexhausted",
         "APITimeoutError": "API\ntimeout",
         "running": "Runner\nstopped",
         "other": "Other",
     }
+    counts = {e: {o: 0 for o in outcomes} for e in experiments}
+    for row in analysis.runs:
+        if row["status"] == "completed":
+            continue
+        outcome = "running" if row["status"] == "running" else row["error_type"]
+        counts[row["experiment"]][outcome if outcome in outcomes else "other"] += 1
+    failures = [o for o in outcomes if any(counts[e][o] for e in experiments)]
     for offset, name in zip((-0.19, 0.19), experiments):
-        values = [counts[name][o] for o in failures]
-        bars = ax_c.bar([k + offset for k in range(len(failures))], values, width=0.36,
-                        color=shades[name])
+        bars = ax_c.bar([k + offset for k in range(len(failures))],
+                        [counts[name][o] for o in failures], width=0.36,
+                        color=EXPERIMENT_SHADES[name])
         ax_c.bar_label(bars, fontsize=6, padding=1.5, color=INK)
     ax_c.set_xticks(range(len(failures)))
     ax_c.set_xticklabels([names[o] for o in failures], fontsize=6.5)
     ax_c.set_ylabel("Failed attempts")
-    attempts = {e: sum(counts[e].values()) for e in experiments}
-    ax_c.set_title("(c) Failed attempts", loc="left")
-    ax_c.text(0.98, 0.97,
-              "\n".join(f"{e.capitalize()}: {attempts[e] - counts[e]['completed']} of {attempts[e]}"
-                        for e in experiments),
-              transform=ax_c.transAxes, ha="right", va="top", fontsize=6.5, color=INK)
-    ax_c.set_ylim(0, max(max(counts[e][o] for o in failures) for e in experiments) * 1.6 + 1)
+    ax_c.set_ylim(0, max(max(counts[e].values()) for e in experiments) * 1.2 + 1)
+    ax_c.set_title("(c)", loc="left")
+
+    fig.legend([*(Patch(facecolor=c) for c in EXPERIMENT_SHADES.values()),
+                _line_handle(color=INK, linewidth=0.8)],
+               [*(e.capitalize() for e in experiments), "Median"], loc="lower left",
+               bbox_to_anchor=(0.11, 0.97), ncol=3, frameon=False, handlelength=1.2)
     return _save(fig, output_dir, "F9_cost_and_reliability")
 
 

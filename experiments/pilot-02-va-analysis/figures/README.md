@@ -2,6 +2,8 @@
 
 Built by `multi_agent_testing.experiment.plots` from the files in `experiments/pilot-02-va-analysis/` only. Each figure is saved as PDF (vector) and PNG (300 dpi). F1 (human difficulty) is in `experiments/pilot-02/figures/`.
 
+The figures show only axes, panel letters, data values and legends. Every statistic and interpretation is in the caption below.
+
 ```bash
 uv sync --extra viz
 uv run python -m multi_agent_testing.experiment.plots pilot02 \
@@ -42,4 +44,4 @@ Wide (48 puzzles × 3 games) is the RQ2 source. Deep (12 puzzles × 32 games) is
 
 **F8 Persona behaviour.** (a) Share of turns where the GM keeps its own proposal or adopts an advisor's suggestion. (b) Share of advisor suggestions from turn 2 on that cannot be the answer. Cautious suggests 13.3 [11.3, 15.5] points more non-candidates than Bold (deep, CI over games), which is the intended direction. Every advisor suggests a non-candidate in most turns.
 
-**F9 Cost and reliability.** (a) Seconds per completed game, with 4 games played in parallel. (b) Prompt and completion tokens per completed game. Both axes stop at the 99th percentile. (c) Failed attempts by cause. "Runner stopped" marks games abandoned when the runner process ended. Each failed unit was retried once.
+**F9 Cost and reliability.** (a) Seconds per completed game, with 4 games played in parallel. (b) Prompt and completion tokens per completed game. Both axes stop at the 99th percentile, so 5 games lie beyond each (the slowest took 699 s). (c) Failed attempts by cause. "Runner stopped" marks games abandoned when the runner process ended. Each failed unit was retried once.
