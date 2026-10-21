@@ -18,6 +18,7 @@ from ..experiment.analysis_pilot02 import (
     cap_scores,
     capped,
     consistency_metrics,
+    correlation_p_value,
     distribution_rows,
     experiment_block,
     icc_oneway,
@@ -126,6 +127,30 @@ class AlignmentTests(unittest.TestCase):
         self.assertAlmostEqual(kendall_tau_b([1, 1, 2], [1, 2, 3]) or 0, 2 / 6 ** 0.5)
         self.assertIsNone(kendall_tau_b([4, 4], [1, 2]))
         self.assertIsNone(kendall_tau_b([1], [1]))
+
+    def test_correlation_p_value_matches_scipy(self):
+        # Reference values from scipy.stats.t (two-sided, n - 2 df).
+        for r, n, expected in (
+            (0.5, 12, 0.0978546142578125),
+            (0.3, 48, 0.03829738000375187),
+            (-0.4, 20, 0.08055387210850923),
+            (0.05, 100, 0.6212899778453028),
+        ):
+            self.assertAlmostEqual(correlation_p_value(r, n) or 0, expected, places=10)
+        self.assertEqual(correlation_p_value(1.0, 5), 0.0)
+        self.assertAlmostEqual(correlation_p_value(0.0, 10) or 0, 1.0)
+        self.assertIsNone(correlation_p_value(0.9, 2))
+        self.assertIsNone(correlation_p_value(None, 10))
+
+    def test_alignment_metrics_report_p_values(self):
+        puzzles = [puzzle(str(i), "D1", 3.5 + i / 10, [4 + i % 3, 4]) for i in range(1, 9)]
+        result = alignment_metrics(puzzles, CUTS)
+        self.assertAlmostEqual(
+            result["spearman_p"], correlation_p_value(result["spearman"], 8) or 0
+        )
+        self.assertAlmostEqual(
+            result["pearson_p"], correlation_p_value(result["pearson"], 8) or 0
+        )
 
     def test_rank_quartiles_ignore_the_scale(self):
         # The system is two guesses worse but keeps the human order.

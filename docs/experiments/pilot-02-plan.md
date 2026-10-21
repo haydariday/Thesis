@@ -287,6 +287,8 @@ vB asks whether DeepSeek's thinking mode makes a better playtester. It differs f
 
 A new `experiment/analysis_pilot02.py` reads both experiment directories and writes CSV and JSON outputs. Like the current `analysis.py`, it uses only the standard library.
 
+**Reporting (decided 2026-10-22).** Results are reported in the simplest form: the value of each measure, with a p-value for Spearman ρ and Pearson r (`spearman_p`, `pearson_p`). The p-value comes from the t-test with n − 2 degrees of freedom, the same test Xiao and Yang use. Confidence intervals are not reported. The bootstrap CIs described below are still computed and stay in `metrics.json` as a backup.
+
 ### RQ1 (Exp A)
 
 - Within-puzzle SD of the penalized score, ICC(1,1) and ICC(1,32).

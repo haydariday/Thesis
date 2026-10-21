@@ -36,6 +36,10 @@ Study conventions encoded here:
   among the puzzles at hand (``quartiles.rank_split``, the ``rank_*``
   metrics).  Rank measures (Spearman, Kendall tau-b, rank quartiles) do not
   need the system to play on the human scale.
+* Reporting is kept simple: values, with p-values for Spearman and
+  Pearson (``spearman_p``, ``pearson_p``; t-test with n - 2 df, as in
+  Xiao and Yang).  The bootstrap CIs below stay in ``metrics.json`` as a
+  backup and are not reported.
 * CIs come from a puzzle-level bootstrap stratified by human quartile, so
   every resample keeps the design's quartile balance.  Runs are never
   treated as independent puzzles.
@@ -55,6 +59,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import math
 import random
 import statistics
 from collections.abc import Callable, Sequence
@@ -572,6 +577,64 @@ def kendall_tau_b(xs: Sequence[float], ys: Sequence[float]) -> float | None:
     return (concordant - discordant) / denominator
 
 
+def correlation_p_value(r: float | None, n: int) -> float | None:
+    """Two-sided p-value for "no correlation" from the t-test with n - 2 df.
+
+    The same test is used for Pearson r and, as the usual approximation, for
+    Spearman rho (scipy does the same).  With t^2 = r^2 (n - 2) / (1 - r^2)
+    the p-value is the regularized incomplete beta I_{1 - r^2}((n - 2) / 2, 1/2).
+    Returns None below three pairs.
+    """
+
+    if r is None or n < 3:
+        return None
+    if abs(r) >= 1.0:
+        return 0.0
+    return _regularized_beta(1.0 - r * r, (n - 2) / 2, 0.5)
+
+
+def _regularized_beta(x: float, a: float, b: float) -> float:
+    """I_x(a, b) by the continued fraction (Numerical Recipes, betai)."""
+
+    if x <= 0.0:
+        return 0.0
+    if x >= 1.0:
+        return 1.0
+    front = math.exp(
+        math.lgamma(a + b) - math.lgamma(a) - math.lgamma(b)
+        + a * math.log(x) + b * math.log1p(-x)
+    )
+    if x < (a + 1) / (a + b + 2):
+        return front * _beta_fraction(x, a, b) / a
+    return 1.0 - front * _beta_fraction(1.0 - x, b, a) / b
+
+
+def _beta_fraction(x: float, a: float, b: float) -> float:
+    """Continued fraction for I_x(a, b), evaluated with Lentz's method."""
+
+    tiny = 1e-300
+
+    def guard(value: float) -> float:
+        return value if abs(value) > tiny else tiny
+
+    c = 1.0
+    d = 1.0 / guard(1.0 - (a + b) * x / (a + 1))
+    result = d
+    for m in range(1, 301):
+        even = m * (b - m) * x / ((a + 2 * m - 1) * (a + 2 * m))
+        d = 1.0 / guard(1.0 + even * d)
+        c = guard(1.0 + even / c)
+        result *= d * c
+        odd = -(a + m) * (a + b + m) * x / ((a + 2 * m) * (a + 2 * m + 1))
+        d = 1.0 / guard(1.0 + odd * d)
+        c = guard(1.0 + odd / c)
+        step = d * c
+        result *= step
+        if abs(step - 1.0) < 1e-14:
+            break
+    return result
+
+
 def quartile_agreement(labels: Sequence[tuple[int, int]]) -> dict[str, Any]:
     """Exact and adjacent agreement, QWK, recall and confusion for
     ``(human, system)`` quartile indices."""
@@ -641,13 +704,17 @@ def alignment_metrics(
     )
 
     count = len(scored)
+    spearman = _spearman(humans, systems)
+    pearson = _pearson(humans, systems)
     return {
         "puzzles": count,
         "mae": statistics.fmean(abs(s - h) for h, s in zip(humans, systems)) if count else None,
         "signed_error": statistics.fmean(s - h for h, s in zip(humans, systems)) if count else None,
-        "spearman": _spearman(humans, systems),
+        "spearman": spearman,
+        "spearman_p": correlation_p_value(spearman, count),
         "kendall_tau_b": kendall_tau_b(humans, systems),
-        "pearson": _pearson(humans, systems),
+        "pearson": pearson,
+        "pearson_p": correlation_p_value(pearson, count),
         "quartile_exact": by_value["exact"],
         "quartile_adjacent": by_value["adjacent"],
         "quadratic_weighted_kappa": by_value["kappa"],
@@ -1046,6 +1113,8 @@ def analyse(
             "(loss = max_guesses + 1). The capped block reads the same games "
             "stopped at 6 guesses (the human scale) and at the sensitivity "
             "limits. The distribution comparison uses the 6-guess scores.",
+            "Reported results are values with p-values for Spearman and "
+            "Pearson (t-test, n - 2 df). Bootstrap CIs are kept as a backup.",
             "CIs resample puzzles within human quartiles; runs are never "
             "treated as independent puzzles.",
             "Distribution CIs resample runs within a puzzle; the human shares "
@@ -1247,14 +1316,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(
             f"{name} ({block['max_guesses']} guesses): {rq1['completed_runs']} runs, "
             f"win rate {rq1['win_rate']}, mean within-SD {rq1['mean_within_sd']}, "
-            f"ICC(1,1) {rq1['icc_1_1']}, Spearman {rq2['spearman']}, "
+            f"ICC(1,1) {rq1['icc_1_1']}, Spearman {rq2['spearman']} (p {rq2['spearman_p']}), "
             f"Kendall {rq2['kendall_tau_b']}, rank QWK {rq2['rank_quadratic_weighted_kappa']}"
         )
         for label, view in block["capped"].items():
             capped_rq2 = view["rq2"]
             print(
                 f"  capped at {label.replace('_', ' ')}: win rate {view['rq1']['win_rate']}, "
-                f"Spearman {capped_rq2['spearman']}, MAE {capped_rq2['mae']}, "
+                f"Spearman {capped_rq2['spearman']} (p {capped_rq2['spearman_p']}), "
+                f"MAE {capped_rq2['mae']}, "
                 f"QWK {capped_rq2['quadratic_weighted_kappa']}"
             )
         if block["distribution"]:
