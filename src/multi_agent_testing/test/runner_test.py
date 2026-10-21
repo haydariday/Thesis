@@ -144,8 +144,9 @@ class RunnerPersonaTest(unittest.TestCase):
 
 
     def test_deepseek_records_thinking_mode_and_key_name(self):
+        # --allow-peak keeps the test from waiting when run in peak hours.
         self.start(
-            "--persona-preset", "pilot-02",
+            "--persona-preset", "pilot-02", "--allow-peak",
             backend=(
                 *DEEPSEEK, "--thinking", "disabled", "--temperature", "0.2",
                 "--max-tokens", "1024", "--json-mode",
@@ -177,7 +178,7 @@ class RunnerPersonaTest(unittest.TestCase):
 
     def test_thinking_variant_with_handicap_is_recorded(self):
         self.start(
-            "--persona-preset", "pilot-02", "--max-guesses", "12",
+            "--persona-preset", "pilot-02", "--max-guesses", "12", "--allow-peak",
             backend=(*DEEPSEEK, "--thinking", "enabled", "--reasoning-effort", "low"),
         )
 

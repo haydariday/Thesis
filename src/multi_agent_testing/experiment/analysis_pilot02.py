@@ -4,8 +4,9 @@ Reads one or both pilot-02 experiment directories (``--deep`` for Exp A,
 ``--wide`` for Exp B), each holding ``experiment_config.json``,
 ``manifest.csv``, ``run_summary.csv`` and ``runs/``, plus the frozen
 ``quartiles.json``.  Writes ``metrics.json``, ``puzzle_summary.csv``,
-``distribution_summary.csv`` (P13), ``persona_stats.csv`` (P13) and
-``openers.csv`` (P13) into ``--output-dir``.  Only the Python standard
+``distribution_summary.csv`` (P13), ``persona_stats.csv`` (P13),
+``openers.csv`` (P13) and ``runs.csv`` (one row per attempt, for the
+figures) into ``--output-dir``.  Only the Python standard
 library is used.
 
 Usage::
@@ -165,6 +166,26 @@ PERSONA_COLUMNS = (
 )
 
 OPENER_COLUMNS = ("experiment", "turn", "puzzle_id", "word", "source", "count")
+
+# One row per attempt, for figures that show single games (F2, F9).
+RUN_COLUMNS = (
+    "experiment",
+    "puzzle_id",
+    "human_quartile",
+    "repetition",
+    "attempt",
+    "status",
+    "error_type",
+    "won",
+    "guesses_used",
+    "score",
+    "score_6_guesses",
+    "prompt_tokens",
+    "completion_tokens",
+    "elapsed_seconds",
+    "agent_calls",
+    "rejected_responses",
+)
 
 
 @dataclass(frozen=True)
@@ -351,6 +372,22 @@ def capped(experiment: Experiment, guesses: int) -> Experiment:
     return replace(
         experiment,
         puzzles=tuple(cap_scores(p, guesses) for p in experiment.puzzles),
+    )
+
+
+def missing_as_loss(puzzle: PuzzleRuns, guesses: int) -> PuzzleRuns:
+    """Score every planned run without a completed game as a loss.
+
+    A unit that used up its attempts failed where the system found the
+    puzzle hardest, so leaving it out makes the puzzle look easier.  This
+    reading bounds that bias from the other side.
+    """
+
+    missing = max(puzzle.planned_runs - len(puzzle.scores), 0)
+    return replace(
+        puzzle,
+        scores=puzzle.scores + (float(guesses + 1),) * missing,
+        losses=puzzle.losses + missing,
     )
 
 
@@ -876,7 +913,28 @@ def experiment_block(
             )
             for guesses in capped_limits(experiment)
         },
+        "missing_as_loss": {
+            label: rq2_metrics(
+                [missing_as_loss(p, guesses) for p in view.puzzles],
+                cut_points,
+                seed,
+                resamples,
+            )
+            for label, view, guesses in score_views(experiment)
+        },
     }
+
+
+def score_views(experiment: Experiment) -> list[tuple[str, Experiment, int]]:
+    """The raw reading plus each capped reading, with its guess limit."""
+
+    return [
+        ("raw", experiment, max_guesses(experiment.config)),
+        *(
+            (f"{guesses}_guesses", capped(experiment, guesses), guesses)
+            for guesses in capped_limits(experiment)
+        ),
+    ]
 
 
 def score_metrics(
@@ -994,6 +1052,9 @@ def analyse(
             "are fixed reference values.",
             "Persona statistics are descriptive; non-candidate shares leave "
             "out turn 1. The Cautious minus Bold gap has a CI over games.",
+            "missing_as_loss scores each planned run without a completed game "
+            "(a unit that used up its attempts) as a loss, as a sensitivity "
+            "check on leaving those units out.",
         ],
     }
     return AnalysisResult(
@@ -1003,8 +1064,47 @@ def analyse(
             "distribution_summary": distribution,
             "persona_stats": personas,
             "openers": openers,
+            "runs": [row for e in experiments for row in run_rows(e)],
         },
     )
+
+
+def run_rows(experiment: Experiment) -> list[dict[str, Any]]:
+    """Every attempt from ``run_summary.csv`` with its raw and 6-guess score."""
+
+    quartile = {p.puzzle_id: p.human_quartile for p in experiment.puzzles}
+    loss = float(STANDARD_GUESSES + 1)
+    rows = []
+    path = experiment.directory / "run_summary.csv"
+    with path.open("r", encoding="utf-8", newline="") as file:
+        for row in csv.DictReader(file):
+            puzzle_id = _normalise_puzzle_id(row["puzzle_id"])
+            score = (
+                _parse_float(row.get("penalized_score"))
+                if row.get("status") == "completed"
+                else None
+            )
+            rows.append(
+                {
+                    "experiment": experiment.name,
+                    "puzzle_id": puzzle_id,
+                    "human_quartile": quartile.get(puzzle_id),
+                    "repetition": row.get("repetition"),
+                    "attempt": row.get("attempt"),
+                    "status": row.get("status"),
+                    "error_type": row.get("error_type") or None,
+                    "won": row.get("won") or None,
+                    "guesses_used": row.get("guesses_used") or None,
+                    "score": score,
+                    "score_6_guesses": min(score, loss) if score is not None else None,
+                    "prompt_tokens": row.get("prompt_tokens") or None,
+                    "completion_tokens": row.get("completion_tokens") or None,
+                    "elapsed_seconds": _parse_float(row.get("elapsed_seconds")),
+                    "agent_calls": row.get("agent_calls") or None,
+                    "rejected_responses": row.get("rejected_responses") or None,
+                }
+            )
+    return rows
 
 
 def persona_rows(experiment: str, stats: dict[str, Any]) -> list[dict[str, Any]]:
@@ -1090,6 +1190,7 @@ TABLE_COLUMNS = {
     "distribution_summary": DISTRIBUTION_COLUMNS,
     "persona_stats": PERSONA_COLUMNS,
     "openers": OPENER_COLUMNS,
+    "runs": RUN_COLUMNS,
 }
 
 

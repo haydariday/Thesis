@@ -4,6 +4,7 @@ import json
 import sys
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from unittest import mock
 
@@ -22,6 +23,7 @@ from ..experiment.analysis_pilot02 import (
     icc_oneway,
     kendall_tau_b,
     load_fingerprints,
+    missing_as_loss,
     pairwise_agreement,
     pooling_blockers,
     quadratic_weighted_kappa,
@@ -165,6 +167,14 @@ class GuessLimitTests(unittest.TestCase):
         self.assertEqual(eight.scores, (3, 7, 9, 9))
         self.assertEqual((eight.wins, eight.losses), (2, 2))
 
+    def test_missing_as_loss(self):
+        raw = replace(puzzle("1", "D2", 4.1, [3, 9], loss=13), planned_runs=3)
+        filled = missing_as_loss(raw, 12)
+
+        self.assertEqual(filled.scores, (3, 9, 13))
+        self.assertEqual(filled.losses, 1)
+        self.assertEqual(missing_as_loss(filled, 12), filled)  # nothing missing
+
     def experiment(self, max_guesses: int, scores: list[float]) -> Experiment:
         config = {"settings": {"repetitions": len(scores), "max_guesses": max_guesses}}
         bins = (0.0, 0.0, 0.25, 0.25, 0.25, 0.25, 0.0)
@@ -180,6 +190,7 @@ class GuessLimitTests(unittest.TestCase):
 
         self.assertEqual(long_games["max_guesses"], 12)
         self.assertEqual(sorted(long_games["capped"]), ["6_guesses", "8_guesses"])
+        self.assertEqual(sorted(long_games["missing_as_loss"]), ["6_guesses", "8_guesses", "raw"])
         self.assertAlmostEqual(long_games["rq1"]["win_rate"], 2 / 3)
         self.assertAlmostEqual(long_games["capped"]["6_guesses"]["rq1"]["win_rate"], 1 / 3)
         self.assertEqual(standard["capped"], {})
@@ -325,6 +336,9 @@ class EndToEndTest(unittest.TestCase):
             self.assertEqual(deep["personas"]["gm_retention_rate"], 1.0)
             openers = (output / "openers.csv").read_text(encoding="utf-8").splitlines()
             self.assertIn("deep,1,all,CIGAR,gm,3", openers)
+            runs = (output / "runs.csv").read_text(encoding="utf-8").splitlines()
+            self.assertEqual(len(runs), 1 + 3 + 2)  # header plus every attempt
+            self.assertIn("deep,0,D2,1,1,completed,,True,1,1.0,1.0", runs[1])
             personas = (output / "persona_stats.csv").read_text(encoding="utf-8").splitlines()
             self.assertEqual(len(personas), 1 + 2 * 4)  # GM plus 3 advisors, per experiment
 
