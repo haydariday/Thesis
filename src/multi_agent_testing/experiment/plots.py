@@ -391,7 +391,7 @@ def figure_f3(analysis: Analysis, output_dir: Path) -> list[Path]:
 
 
 def figure_f4(analysis: Analysis, output_dir: Path) -> list[Path]:
-    """F4 (RQ2 distribution): W1 with its CI per deep puzzle, by quartile."""
+    """F4 (RQ2 distribution): W1 per deep puzzle, by quartile."""
 
     human_mean = {
         p["puzzle_id"]: float(p["human_mean"]) for p in analysis.puzzles if p["experiment"] == "deep"
@@ -409,8 +409,6 @@ def figure_f4(analysis: Analysis, output_dir: Path) -> list[Path]:
     ax.axvspan(0, summary["mean_split_half_random_w1"], color=noise, zorder=0)
     for y, row in zip(ys, rows):
         colour = QUARTILE_COLOURS[row["human_quartile"]]
-        ax.plot([float(row["w1_ci_low"]), float(row["w1_ci_high"])], [y, y], color=INK,
-                linewidth=0.9, zorder=2)
         ax.scatter([float(row["w1"])], [y], s=22, color=colour, edgecolor=INK, linewidth=0.4,
                    zorder=3)
     ax.set_yticks(ys)
@@ -425,14 +423,14 @@ def figure_f4(analysis: Analysis, output_dir: Path) -> list[Path]:
     _top_legend(
         ax,
         [
-            _line_handle(color=INK, linewidth=0.9, marker="o", markersize=4.5,
+            _line_handle(linestyle="", marker="o", markersize=4.5,
                          markerfacecolor="white", markeredgecolor=INK),
             Patch(facecolor=noise),
         ],
-        ["W1 with 95% CI", "Split-half W1"],
+        ["W1", "Split-half W1"],
         ncol=2,
     )
-    return _save(fig, output_dir, "F4_w1_forest")
+    return _save(fig, output_dir, "F4_w1_by_puzzle")
 
 
 def figure_f5(analysis: Analysis, output_dir: Path) -> list[Path]:
@@ -515,9 +513,11 @@ def figure_f6(analysis: Analysis, output_dir: Path) -> list[Path]:
 
 
 def _confusion_panel(ax, matrix: dict, letter: str, system_axis: str) -> None:
+    # D4 on top, so the rows line up with a plot whose y axis grows harder.
     counts = matrix["counts"]
     size = len(QUARTILE_LABELS)
-    values = [[counts[h][s] for s in QUARTILE_LABELS] for h in QUARTILE_LABELS]
+    rows = QUARTILE_LABELS[::-1]
+    values = [[counts[h][s] for s in QUARTILE_LABELS] for h in rows]
     top = max(max(row) for row in values) or 1
     ax.imshow(values, cmap="Blues", vmin=0, vmax=top * 1.15)
     for i, row in enumerate(values):
@@ -532,8 +532,8 @@ def _confusion_panel(ax, matrix: dict, letter: str, system_axis: str) -> None:
     ax.set_xticks(range(size))
     ax.set_yticks(range(size))
     ax.set_xticklabels(QUARTILE_LABELS)
-    ax.set_yticklabels(QUARTILE_LABELS)
-    for tick, label in zip(ax.get_yticklabels(), QUARTILE_LABELS):
+    ax.set_yticklabels(rows)
+    for tick, label in zip(ax.get_yticklabels(), rows):
         tick.set_color(QUARTILE_TEXT_COLOURS[label])
     ax.set_xlabel(system_axis)
     ax.set_ylabel("Human quartile")
@@ -543,18 +543,69 @@ def _confusion_panel(ax, matrix: dict, letter: str, system_axis: str) -> None:
     ax.set_title(letter, loc="left")
 
 
-def figure_f7(analysis: Analysis, output_dir: Path) -> list[Path]:
-    """F7 (RQ2 D1-D4): wide quartiles by value (6-guess) and by rank (raw)."""
+BOUNDARY = "#B5B5B5"  # human D1-D4 lines; GRID is too faint to read as a boundary
 
-    block = analysis.block("wide")
+
+def _rank_boundaries(values: list[float], labels: list[str]) -> list[float]:
+    """Where the rank split falls between D1..D4 on the value axis.
+
+    Midway between the largest value of one group and the smallest of the
+    next. When a value is tied across groups, the boundary sits on it.
+    """
+
+    groups = {q: [v for v, label in zip(values, labels) if label == q] for q in QUARTILE_LABELS}
+    return [
+        (max(groups[low]) + min(groups[high])) / 2
+        for low, high in zip(QUARTILE_LABELS, QUARTILE_LABELS[1:])
+    ]
+
+
+def figure_f7(analysis: Analysis, output_dir: Path) -> list[Path]:
+    """F7 (RQ2 D1-D4): wide puzzles split by system rank, as points and as counts."""
+
+    rows = analysis.puzzle_rows("wide")
+    cuts = analysis.metrics["cut_points"]
+    human = [float(r["human_mean"]) for r in rows]
+    system = [float(r["system_mean"]) for r in rows]
+    quartiles = [r["human_quartile"] for r in rows]
+    boundaries = _rank_boundaries(system, [r["system_rank_quartile"] for r in rows])
 
     _style()
-    fig, (ax_a, ax_b) = plt.subplots(1, 2, figsize=(IEEE_DOUBLE_COLUMN_IN, 2.5),
-                                     gridspec_kw={"wspace": 0.45})
-    _confusion_panel(ax_a, block["capped"]["6_guesses"]["rq2"]["confusion_matrix"], "(a)",
-                     "System quartile (cut-points)")
-    _confusion_panel(ax_b, block["rq2"]["rank_confusion_matrix"], "(b)",
+    fig, (ax_a, ax_b) = plt.subplots(1, 2, figsize=(IEEE_DOUBLE_COLUMN_IN, 2.8),
+                                     gridspec_kw={"wspace": 0.35, "width_ratios": [1.4, 1]})
+
+    x_low, x_high = min(system) - 0.4, max(system) + 0.4
+    y_low, y_high = min(human) - 0.08, max(human) + 0.08
+    for cut in cuts:
+        ax_a.axhline(cut, color=BOUNDARY, linewidth=0.8, zorder=0)
+    for boundary in boundaries:
+        ax_a.axvline(boundary, zorder=1, **DASHED)
+    _quartile_scatter(ax_a, system, human, quartiles)
+    ax_a.set_xlim(x_low, x_high)
+    ax_a.set_ylim(y_low, y_high)
+    ax_a.set_xlabel("System mean score (12 guesses)")
+    ax_a.set_ylabel("Human mean score")
+    ax_a.set_title("(a)", loc="left", pad=12)
+    # Quartile names: system columns along the top, human rows on the right.
+    columns = [x_low, *boundaries, x_high]
+    for label, left, right in zip(QUARTILE_LABELS, columns, columns[1:]):
+        ax_a.text((left + right) / 2, 1.01, label, transform=ax_a.get_xaxis_transform(),
+                  ha="center", va="bottom", fontsize=7, color=INK)
+    bands = [y_low, *cuts, y_high]
+    for label, bottom, top in zip(QUARTILE_LABELS, bands, bands[1:]):
+        ax_a.text(1.01, (bottom + top) / 2, label, transform=ax_a.get_yaxis_transform(),
+                  ha="left", va="center", fontsize=7, color=QUARTILE_TEXT_COLOURS[label])
+
+    _confusion_panel(ax_b, analysis.block("wide")["rq2"]["rank_confusion_matrix"], "(b)",
                      "System quartile (rank)")
+
+    fig.legend(
+        [*_quartile_handles(), _line_handle(**DASHED), _line_handle(color=BOUNDARY, linewidth=1.2)],
+        [*(f"Human {q}" for q in QUARTILE_LABELS), "System D1–D4 boundary",
+         "Human D1–D4 boundary"],
+        loc="lower left", bbox_to_anchor=(0.06, 1.0), ncol=6, frameon=False,
+        handletextpad=0.3, columnspacing=1.0,
+    )
     return _save(fig, output_dir, "F7_quartile_confusion")
 
 

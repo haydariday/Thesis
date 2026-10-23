@@ -7,7 +7,7 @@ Global docs: `Wordle Multi-Agent Playtesting Research Context and Experiment Roa
 ## Data provenance
 
 - Raw puzzles: `https://engaging-data.com/pages/scripts/wordlebot/wordlepuzzles.js` → `src/data/raw/worldepuzzles.json` (typo preserved)
-- Allowed guesses: `src/data/raw/allowed_guesses.txt`
+- Allowed guesses: `https://github.com/tabatkins/wordle-list` file `words` at commit `255b9469c4` (2022-09-06, after "New words in the NYT list") → `src/data/raw/allowed_guesses.txt` (byte-identical, 14,855 words, unsorted as published)
 - Never put answer words or human scores in agent prompts.
 - Cleaned 7-bin human data (pilot-02 P1): `src/data/processed/wordle_human_clean.csv` + `.summary.json` (input hashes, counts). Bins `p1..p6 = individual/100`, `p7 = (100 - sum)/100` (fail). Same eligibility as pilot-01 (1,861 of 1,865 eligible; 26 duplicate answers flagged). Rebuild:
 

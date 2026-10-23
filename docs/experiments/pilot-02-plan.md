@@ -335,10 +335,10 @@ Output goes to `experiments/pilot-02-*/figures/` as both PDF (vector, for the pa
 | F1 Human difficulty | Histogram of human means with the D1–D4 cut lines, plus the mean 7-bin distribution for each quartile as stacked bars | Data chapter, quartile definition |
 | F2 Run-to-run spread | Strip or box plot of the 32 scores for each Exp A puzzle, ordered by human mean, with the human mean marked | RQ1 |
 | F3 Distribution comparison | 12 small panels, one per Exp A puzzle, each with paired human and system bars over bins 1–7 and the W1 value in the corner | RQ2 distribution |
-| F4 Distance forest plot | W1 with its bootstrap CI for each puzzle, grouped by quartile | RQ2 distribution |
+| F4 W1 by puzzle | W1 for each puzzle, grouped by quartile, against the split-half noise level | RQ2 distribution |
 | F5 Mean alignment | Scatter of system mean against human mean with the y = x line and quartile cut lines, colored by human quartile | RQ2 mean |
 | F6 Bland-Altman | Difference (system − human) against the average of the two, with bias and limits of agreement | RQ2 mean, shows the systematic "easier than human" bias |
-| F7 Quartile confusion | 4×4 heatmap of human quartile against system quartile, with counts and row percentages | RQ2 D1–D4 |
+| F7 Quartile confusion | System mean against human mean with the rank-based D1–D4 boundaries, beside the 4×4 rank confusion matrix with counts and row percentages | RQ2 D1–D4 |
 | F8 Persona behavior | Bars of GM retention, the adoption rate for each advisor and the non-candidate share for each advisor | Persona manipulation check, future GM RQ |
 | F9 Cost and reliability | Distributions of tokens and seconds per game, plus failure counts | Supporting measurements |
 
