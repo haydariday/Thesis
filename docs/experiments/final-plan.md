@@ -122,7 +122,7 @@ The references in this section were cited from memory and must be checked before
 | C2 | one decision per turn, `--max-repairs 2` |
 | Requests | `--request-timeout 300 --api-retries 1 --max-attempts 2` |
 | Personas | C1 `--persona-preset pilot-02`, C2 `--persona-preset solo`, C3 `--persona-preset neutral` |
-| Runs | `--repetitions 10`, `--workers 8` (F7 ran 12 games at once without rate limits) |
+| Runs | `--repetitions 10`, `--workers 4` per condition, the three conditions at the same time (12 games at once, as in F7 without rate limits) |
 | Output | `experiments/final-c1`, `experiments/final-c2`, `experiments/final-c3` |
 | Model snapshot | `system_fingerprint` `bc19ba97cbe016479903222bb1578db6` on all F7 calls; returned `model` `deepseek-flash` |
 | Code revision | the commit tagged `final-frozen`; every condition must record it with `code_dirty: false` |
@@ -136,8 +136,8 @@ Frozen on 2 November 2026 (F8). After the tag, nothing in Sections 1, 2 or 6 cha
 ### 6.2 Run rules
 
 1. Run all three conditions from the tag with a clean tree. Commit nothing until the last condition has finished, so the three share one `code_revision`.
-2. **Interleave the conditions.** Run them in alternating chunks (for example C1, C3, C2 with `--max-seconds 7200`, then `resume` each in turn) rather than one after another. A model update during the run then affects all three alike instead of one condition.
-3. **Fingerprint stop rule.** Check the `system_fingerprint` after every chunk. If it changes, pause all conditions and decide before continuing. Games on two fingerprints are reported separately.
+2. **Run the conditions in parallel.** Start C1, C2 and C3 at the same time, each in its own terminal with `--workers 4`, rather than one after another. A model update during the run then affects all three at the same moment instead of one condition. (Changed on 2 November 2026 from alternating 2-hour chunks, before any final game. The runner's results do not depend on the worker count.) A condition that stops is continued with `resume --workers 4`.
+3. **Fingerprint stop rule.** Check the `system_fingerprint` after the first few hours and then at least daily. If it changes, pause all conditions and decide before continuing. Games on two fingerprints are reported separately.
 4. Off-peak only, as the runner enforces by default (no `--allow-peak`).
 5. A failed game is retried once. Games still missing after two attempts are documented, and the analysis repeats RQ2 with them scored as losses (the existing `missing_as_loss` check).
 
@@ -154,9 +154,8 @@ uv run python -m multi_agent_testing.experiment.runner start \
   --thinking enabled --reasoning-effort low --max-tokens 4096 --json-mode \
   --max-guesses 6 --max-rounds 3 --max-repairs 2 \
   --request-timeout 300 --api-retries 1 \
-  --repetitions 10 --max-attempts 2 --workers 8 \
-  --persona-preset pilot-02 \
-  --max-seconds 7200
+  --repetitions 10 --max-attempts 2 --workers 4 \
+  --persona-preset pilot-02
 ```
 
 ### 6.3 Cost and time
@@ -168,7 +167,7 @@ Prices are DeepSeek's off-peak rates per 1M tokens ($0.003 cache hit, $0.15 cach
 | C1 persona debate | 1,000 | about $20 | measured at F7 ($0.0196 per game) | about 14 h |
 | C2 single agent | 1,000 | about $2 | measured at F7 ($0.0016 per game) | about 1.5 h |
 | C3 debate without personas | 1,000 | about $22 | measured at F7 with the revised prompt ($0.0218 per game) | about 16 h |
-| **Total** | **3,000** | **about $44** | | **about 31 h** (about half with 8 workers) |
+| **Total** | **3,000** | **about $44** | | **about 16 h** with the three conditions in parallel (C1 and C3 side by side, plus peak-hour pauses) |
 
 The draft estimates were $21, $4 and $21 (C1 from the 532 vB attempts, C2 and C3 assumed). F7 replaced them with the smoke measurements below.
 
@@ -272,7 +271,7 @@ The final study uses two ablations, C2 (no debate) and C3 (no personas). Other d
 | **F6** Final analysis | Per-condition metrics and paired contrasts | Add `analysis_final.py` (Section 7), terciles, the ICC F-intervals and the Holm-corrected Wilcoxon contrasts. | Tests on synthetic runs reproduce known values, and the module writes `metrics.json`, `condition_summary.csv`, `contrasts.csv` and `persona_stats.csv` (plus `puzzle_summary.csv` and `runs.csv` for F11). | offline | M |
 | **F7** Smoke tests | Measure C2 and C3 before freezing | Play the smoke manifest × 2 games in each condition (48 games, under $1). Read one transcript per condition. | At least 15 of 16 games complete per condition, the neutral advisors argue without playstyles, and the measured cost per game replaces the estimates in Section 6.3. | live (tiny) | S |
 | **F8** Freeze | Lock the final configuration | Record the model, snapshot, settings, personas, prompts, hashes and code revision in Section 6.1. Tag `final-frozen`. | The tag exists, and nothing in Sections 1, 2 or 6 changes after it. | offline | S |
-| **F9** Run | Collect the 3,000 games | Interleaved chunks of C1, C3 and C2 (Section 6.2). | 100 × 10 completed games per condition, or failures documented. | live (~28 h) | L |
+| **F9** Run | Collect the 3,000 games | C1, C2 and C3 in parallel, 4 workers each (Section 6.2). | 100 × 10 completed games per condition, or failures documented. | live (~16 h) | L |
 | **F10** Analysis | Produce the results | Run `analysis_final.py` on the three directories. | `metrics.json` and the CSVs exist in `experiments/final-analysis`. | offline | S |
 | **F11** Figures | Visualize the results | Extend `plots.py` with per-condition panels and contrast plots, read only from the analysis outputs. | All figures exist as PDF and PNG and pass a visual check. | offline | M |
 | **F12** Findings | Close the study | Write the findings into the roadmap and the thesis results chapter. | The results are recorded with the deviations from this plan. | offline | S |
