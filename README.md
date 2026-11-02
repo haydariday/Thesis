@@ -1,8 +1,8 @@
 # Wordle Multi-Agent Playtesting
 
-Persona-based multi-agent debate (Game Master + advisors, LangGraph) playing Wordle. System-validation study: RQ1 outcome consistency, RQ2 human difficulty alignment. Wordle only, no single-agent comparison in conference scope.
+Persona-based multi-agent debate (Game Master + advisors, LangGraph) playing Wordle. System-validation study: RQ1 outcome consistency, RQ2 human difficulty alignment. Wordle only. The pilots and the conference paper have no single-agent comparison. The final study adds two baselines, a single agent (C2) and a debate without personas (C3), next to the persona debate (C1).
 
-Global docs: `Wordle Multi-Agent Playtesting Research Context and Experiment Roadmap.md` (scope, RQ1/RQ2, milestones) + `docs/experiments/pilot-02-plan.md` (frozen pilot-02 design).
+Global docs: `Wordle Multi-Agent Playtesting Research Context and Experiment Roadmap.md` (scope, RQ1/RQ2, milestones) + `docs/experiments/pilot-02-plan.md` (frozen pilot-02 design) + `docs/experiments/final-plan.md` (final study design).
 
 ## Data provenance
 

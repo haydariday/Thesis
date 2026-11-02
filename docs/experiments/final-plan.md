@@ -1,6 +1,6 @@
 # Final Study Plan: Persona Debate Against a Single Agent and a Debate Without Personas
 
-Drafted: 2 November 2026. Status: plan only. No code has been changed yet. The study runs on its own branch, which the author creates by hand. Each phase below is one commit on that branch, prefixed `F<n>:`.
+Drafted: 2 November 2026. Status: F0 decisions recorded on 2 November 2026; supervisor sign-off of the items in Section 9 is still pending. The study runs on branch `final-experimentation`. Each phase below is one commit on that branch, prefixed `F<n>:`.
 
 The pilot validated the persona-based debate on its own. The final study adds two reference conditions, so that it can say what the debate adds over one agent and what the personas add over a debate without them. All three conditions use the reasoning configuration of the pilot (configuration vB, Section 6.3 of `pilot-02-plan.md`), since it was the only one in which the personas behaved differently from each other.
 
@@ -13,8 +13,9 @@ The pilot validated the persona-based debate on its own. The final study adds tw
 | Conditions | C1 persona debate, C2 single agent, C3 debate without personas (Section 2). |
 | Size | 100 fresh puzzles (25 per human quartile) × 10 runs × 3 conditions = 3,000 games (Section 5). |
 | Pairing | Every condition plays the same 100 puzzles with the same 10 repetitions, so every comparison is paired by puzzle. |
-| Difficulty categories | Terciles (cut-points 4.07 and 4.42 over the 1,861 eligible puzzles), as decided in the progress report on 2026-10-23. Quartiles stay for sampling and as a sensitivity check. **To confirm at F0.** |
+| Difficulty categories | Terciles (cut-points 4.07 and 4.42 over the 1,861 eligible puzzles), as decided in the progress report on 2026-10-23. Quartiles stay for sampling and as a sensitivity check. Adopted at F0, frozen at F1 in `terciles.json`. |
 | Reporting | Values with p-values for Spearman ρ and Pearson r, as in the pilot. Paired condition contrasts are reported with 95% puzzle-bootstrap intervals, stratified by quartile. |
+| Budget | About $55 including retries and smoke tests. Stop and review above $70 (Section 6.3). Adopted at F0. |
 | Pooling | None. The new code makes this a new configuration, so no pilot game counts toward the final study (README reuse rule 3). |
 
 ## 2. Conditions
@@ -57,7 +58,7 @@ The pilot-02 persona text stays byte-identical, since `resume` refuses a changed
 
 ## 3. Research questions
 
-The three research questions keep their wording. C2 and C3 add no research question of their own. They serve as baselines inside the existing questions, mainly RQ2, so the study stays a validation of the persona debate. **To confirm at F0**, since the thesis currently uses RQ3 for the expert evaluation and the roadmap says "no single-agent condition".
+The three research questions keep their wording. C2 and C3 add no research question of their own. They serve as baselines inside the existing questions, mainly RQ2, so the study stays a validation of the persona debate. Adopted at F0. The roadmap and README now include C2 and C3 in the final-study scope. The thesis still uses RQ3 for the expert evaluation, so the RQ3 numbering stays open for the supervisor (Section 9).
 
 - **RQ1.** How consistent are the playtest outcomes across repeated runs on the same puzzles?
 - **RQ2.** To what extent do the difficulty estimates agree with human difficulty, measured by average guess scores and difficulty categories?

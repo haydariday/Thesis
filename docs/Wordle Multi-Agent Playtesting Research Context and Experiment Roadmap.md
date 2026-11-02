@@ -4,7 +4,13 @@ Updated: 8 October 2026.
 
 This README records the current conference-paper scope and the work needed to obtain defensible results from the Wordle playtesting app. It is an experiment plan and context handover, not a claim that the implementation or evaluation is complete.
 
-## Current scope
+## Final study scope (2 November 2026)
+
+The final study (`docs/experiments/final-plan.md`) extends the scope below with two baseline conditions next to the persona debate (C1): a single agent (C2) and a debate with three neutral advisors (C3). C3 − C2 estimates the effect of the debate. C1 − C3 estimates the effect of the personas. The baselines add no research question of their own. They give reference values inside RQ1 to RQ3, mainly RQ2. Difficulty categories are terciles of the human mean (cut-points 4.07 and 4.42). The final study runs 100 fresh puzzles × 10 runs × 3 conditions. Supervisor sign-off on the RQ3 numbering and the terciles is still pending.
+
+The scope below records the conference paper and the pilots. Where it excludes a single-agent comparison, that applies to the conference paper only.
+
+## Conference scope
 
 - **Game:** Wordle only.
 - **System:** Persona-based multi-agent debate orchestrated with LangGraph.
@@ -320,3 +326,5 @@ The study is ready for interpretation when the frozen final evaluation has repro
 It is not complete merely because a debate returns a valid guess or one puzzle is solved. Conclusions must remain limited to the evaluated model, protocol, puzzle selection, and Wordle rules; correlation alone does not establish exact human-score agreement or causal benefit from debate.
 
 **Immediate next action:** The pilot (`experiments/pilot-01`) has run; its findings and design implications are recorded above. Next: decide the final configuration (review-prompt revision and/or model choice, given the depth-1 finding), strengthen the RQ1 design (hard-tail puzzles, 5 repetitions, ICC plus pre-registered equivalence), then freeze the configuration and run the final evaluation on a fresh puzzle selection. Keep the pilot puzzles out of the final evaluation. Do not add a single-agent mode for this scope.
+
+**Update (2 November 2026):** The final study adds a single-agent and a no-persona baseline (see the final study scope above and `docs/experiments/final-plan.md`).

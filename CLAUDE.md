@@ -4,9 +4,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-Thesis research code: a persona-based multi-agent debate (Game Master + advisors, built on LangGraph) plays Wordle as an automated playtester. It is a system-validation study. RQ1 is outcome consistency across repeated runs. RQ2 is alignment with human difficulty. Scope is Wordle only, with no single-agent condition.
+Thesis research code: a persona-based multi-agent debate (Game Master + advisors, built on LangGraph) plays Wordle as an automated playtester. It is a system-validation study. RQ1 is outcome consistency across repeated runs. RQ2 is alignment with human difficulty. Scope is Wordle only. The final study (`docs/experiments/final-plan.md`) compares the persona debate with two baselines, a single agent and a debate without personas. The pilots had no baseline condition.
 
 Key docs (read before changing experiment behavior):
+- `docs/experiments/final-plan.md` — final study design (C1 persona debate, C2 single agent, C3 debate without personas) and the F0–F12 phase table. Each phase is one commit on branch `final-experimentation`, prefixed `F<n>:`.
 - `docs/experiments/pilot-02-plan.md` — frozen pilot-02 design and the P0–P15 phase table. Each phase is one commit on branch `pilot-2`, prefixed `P<n>:`.
 - `docs/Wordle Multi-Agent Playtesting Research Context and Experiment Roadmap.md` — scope, RQs, milestones.
 - `README.md` — data provenance, frozen configs, pilot→final reuse rules.
