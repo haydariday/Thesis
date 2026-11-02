@@ -122,8 +122,16 @@ The references in this section were cited from memory and must be checked before
 | C2 | one decision per turn, `--max-repairs 2` |
 | Requests | `--request-timeout 300 --api-retries 1 --max-attempts 2` |
 | Personas | C1 `--persona-preset pilot-02`, C2 `--persona-preset solo`, C3 `--persona-preset neutral` |
-| Runs | `--repetitions 10`, `--workers 4` (8 if the smoke test shows no rate limits) |
+| Runs | `--repetitions 10`, `--workers 8` (F7 ran 12 games at once without rate limits) |
 | Output | `experiments/final-c1`, `experiments/final-c2`, `experiments/final-c3` |
+| Model snapshot | `system_fingerprint` `bc19ba97cbe016479903222bb1578db6` on all F7 calls; returned `model` `deepseek-flash` |
+| Code revision | the commit tagged `final-frozen`; every condition must record it with `code_dirty: false` |
+| Persona text | `agent/personas.py` at the tag: `neutral_gm`, `bold`, `cautious`, `casual` (pilot-02 text, checked against the vB config), `solo_player`, `neutral_1..3` (revised wording, Section 2.2) |
+| Manifest | `experiments/manifests/final.csv` (100 puzzles, 33/33/34 per tercile), sha256 `7cbc9c0d725d2002cf7a980a0f85ba9faa03770c8c728bc8c1a512c97e8b68c0` |
+| Data | dataset `ed235aa7…41a27`, guess list `9df5dad1…a121e`, clean CSV `3f15e93b…3b3a8`, `terciles.json` `5296a727…61c7fd`, `quartiles.json` `d91925d7…0a6d` (sha256) |
+| Environment | Python 3.12.14, langgraph 1.2.13, openai 3.26.0, pydantic 2.13.5 |
+
+Frozen on 2 November 2026 (F8). After the tag, nothing in Sections 1, 2 or 6 changes. A change would make a new configuration whose games do not pool with these.
 
 ### 6.2 Run rules
 
@@ -146,7 +154,7 @@ uv run python -m multi_agent_testing.experiment.runner start \
   --thinking enabled --reasoning-effort low --max-tokens 4096 --json-mode \
   --max-guesses 6 --max-rounds 3 --max-repairs 2 \
   --request-timeout 300 --api-retries 1 \
-  --repetitions 10 --max-attempts 2 --workers 4 \
+  --repetitions 10 --max-attempts 2 --workers 8 \
   --persona-preset pilot-02 \
   --max-seconds 7200
 ```
@@ -276,7 +284,7 @@ The final study uses two ablations, C2 (no debate) and C3 (no personas). Other d
 - **After the first chunk of each condition in F9:** check the fingerprints, the failure rate and the spend before continuing.
 
 ## 9. Open questions for the supervisor
-- Advisors speak in a fixed order and see the earlier advice of the same round, as in the pilot. F7 shows strong herding in C3. The plan reports both as limitations (Section 7.1). Optional add-on, decided before F8: an **order ablation** under RQ3 as a pre-registered robustness check. C1 with the reversed order (Casual → Cautious → Bold) on the 100 final puzzles × 3 runs (300 games, about $6 and 4–5 hours). It reports adoption, herding and non-candidate shares per persona by position (RQ3) and, descriptively, Spearman ρ and bias against the main C1 run (RQ2). It adds no research question and never pools with C1. A blind-advisor variant is not proposed, since it would change the protocol validated in the pilot.
+- Advisors speak in a fixed order and see the earlier advice of the same round, as in the pilot. F7 shows strong herding in C3. The plan reports both as limitations (Section 7.1). Optional add-on, decided before F8: an **order ablation** under RQ3 as a pre-registered robustness check. C1 with the reversed order (Casual → Cautious → Bold) on the 100 final puzzles × 3 runs (300 games, about $6 and 4–5 hours). It reports adoption, herding and non-candidate shares per persona by position (RQ3) and, descriptively, Spearman ρ and bias against the main C1 run (RQ2). It adds no research question and never pools with C1. A blind-advisor variant is not proposed, since it would change the protocol validated in the pilot. **Decided on 2 November 2026: the order ablation is skipped. Order and herding are reported as limitations (Section 7.1).**
 
 - RQ3 in the thesis (expert evaluation) against persona behavior here, and whether C2 and C3 as baselines inside RQ1 to RQ3 are enough without a separate comparison question.
 - Whether terciles replace quartiles as the category scheme of the final study.
