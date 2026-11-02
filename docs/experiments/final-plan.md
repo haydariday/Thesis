@@ -34,6 +34,15 @@ The contrasts are planned in advance:
 
 C1 against C2 is reported as the overall difference but is not a separate test.
 
+### 2.0 Debate protocols
+
+Two protocols are implemented (runner flag `--debate-protocol`, recorded in each config):
+
+- **`sequential`** (the pilot protocol, frozen at `final-frozen`): each advisor reads the GM's proposal and the suggestions of the earlier advisors in the same round.
+- **`blind`** (added on 2 November 2026): each advisor reads the GM's proposal and the transcript up to the start of the round, but not the other advisors' advice of that round. The advisors of a round therefore answer independently, while the GM review still sees every suggestion. Later rounds see the earlier rounds in full. This follows debates in which agents see each other's answers only from the previous round [Du et al.].
+
+C2 has no advisors, so the protocol does not affect it. Which protocol the final study uses is open (Section 9). Switching to `blind` removes same-round order effects and herding by design, but changes the protocol validated in the pilot, so it needs new C1 and C3 smoke tests and a new freeze.
+
 ### 2.1 C2 single agent
 
 C2 plays the game, as the single agents of Xiao and Yang do. It does not rate difficulty, since a rating could not be compared with guess counts. The agent receives the same game knowledge, bridge output and reply format as the debate agents. Each turn it returns one decision, which the bridge validates and plays. Invalid replies get the same repair re-asks as in C1.
@@ -283,6 +292,7 @@ The final study uses two ablations, C2 (no debate) and C3 (no personas). Other d
 - **After the first chunk of each condition in F9:** check the fingerprints, the failure rate and the spend before continuing.
 
 ## 9. Open questions for the supervisor
+- **Debate protocol for the final study: `sequential` (frozen now) or `blind` (Section 2.0)?** `blind` removes the order and herding limitations of Section 7.1 and makes the persona check a direct Cautious − Bold comparison, but the final system then differs from the one the pilot and the progress report describe. If `blind` is chosen: rerun the C1 and C3 smoke tests, update Sections 6.1 and 7, and move the `final-frozen` tag. **F9 waits for this decision.**
 - Advisors speak in a fixed order and see the earlier advice of the same round, as in the pilot. F7 shows strong herding in C3. The plan reports both as limitations (Section 7.1). Optional add-on, decided before F8: an **order ablation** under RQ3 as a pre-registered robustness check. C1 with the reversed order (Casual → Cautious → Bold) on the 100 final puzzles × 3 runs (300 games, about $6 and 4–5 hours). It reports adoption, herding and non-candidate shares per persona by position (RQ3) and, descriptively, Spearman ρ and bias against the main C1 run (RQ2). It adds no research question and never pools with C1. A blind-advisor variant is not proposed, since it would change the protocol validated in the pilot. **Decided on 2 November 2026: the order ablation is skipped. Order and herding are reported as limitations (Section 7.1).**
 
 - RQ3 in the thesis (expert evaluation) against persona behavior here, and whether C2 and C3 as baselines inside RQ1 to RQ3 are enough without a separate comparison question.

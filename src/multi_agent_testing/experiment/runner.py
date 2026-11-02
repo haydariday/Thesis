@@ -54,6 +54,7 @@ from ..games.wordle.dataset import (
     load_puzzle,
 )
 from ..games.wordle.engine import MAX_GUESS_LIMIT, STANDARD_GUESSES, WordleGame
+from ..orchestra.debate_context import DebateProtocol
 from ..play import play_wordle_game
 from ..run_log import RunLog
 from .summary import write_summary
@@ -194,6 +195,7 @@ def build_config(args) -> dict:
         "stream": False,
         "max_rounds": args.max_rounds,
         "max_repairs": args.max_repairs,
+        "debate_protocol": args.debate_protocol,
         "request_timeout": args.request_timeout,
         "api_retries": args.api_retries,
         "repetitions": args.repetitions,
@@ -408,6 +410,8 @@ def execute_plan(
     backend = build_backend(settings)
     allowed_guesses = load_allowed_guesses(Path(config["guess_list"]))
     max_guesses = settings.get("max_guesses", STANDARD_GUESSES)
+    # Configs written before the blind protocol existed ran sequential debates.
+    debate_protocol = settings.get("debate_protocol", DebateProtocol.SEQUENTIAL.value)
 
     puzzle_cache: dict[str, WordlePuzzle] = {}
     attempts = scan_attempts(runs_dir)
@@ -455,6 +459,7 @@ def execute_plan(
             "stream": settings["stream"],
             "max_rounds": settings["max_rounds"],
             "max_repairs": settings["max_repairs"],
+            "debate_protocol": debate_protocol,
             "request_timeout": settings["request_timeout"],
             "api_retries": settings["api_retries"],
             "puzzle_id": puzzle.puzzle_id,
@@ -478,6 +483,7 @@ def execute_plan(
             run=run,
             max_rounds=settings["max_rounds"],
             max_repairs=settings["max_repairs"],
+            debate_protocol=DebateProtocol(debate_protocol),
             stream=False,
             echo=False,
             raise_errors=False,
@@ -836,6 +842,13 @@ def main() -> None:
     )
     start.add_argument("--max-rounds", type=int, default=3)
     start.add_argument("--max-repairs", type=int, default=1)
+    start.add_argument(
+        "--debate-protocol",
+        choices=[p.value for p in DebateProtocol],
+        default=DebateProtocol.SEQUENTIAL.value,
+        help="sequential (pilot): advisors read the earlier suggestions of the round; "
+        "blind: advisors of one round answer independently.",
+    )
     start.add_argument("--request-timeout", type=float, default=300.0)
     start.add_argument("--api-retries", type=int, default=1)
     start.add_argument("--repetitions", type=int, default=3)

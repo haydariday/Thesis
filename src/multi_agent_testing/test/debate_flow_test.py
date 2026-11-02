@@ -8,6 +8,8 @@ from ..agent.personas import create_lineup
 from ..games.wordle.bridge import WordleBridge
 from ..games.wordle.dataset import WordlePuzzle
 from ..games.wordle.engine import WordleGame
+from ..orchestra.debate import create_debate_graph
+from ..orchestra.debate_context import DebateProtocol, new_debate_state
 from ..play import play_wordle_game
 from ..run_log import CallRecorder, RunLog
 
@@ -600,6 +602,62 @@ class DebateFlowTests(unittest.TestCase):
         bridge = WordleBridge(self.make_game(max_attempts=6))
         self.assertNotIn("CIGAR", bridge.observe())
 
+
+
+class DebateProtocolTests(unittest.TestCase):
+    """What each agent sees of the current round under both protocols."""
+
+    WORDS = ["SLATE", "STARE", "CRANE", "SLATE", "SLATE", "STARE", "CRANE", "SLATE", "SLATE"]
+
+    def run_turn(self, protocol: DebateProtocol, preset: str = "pilot-02") -> list[tuple[str, dict]]:
+        backend = RecordingSequenceBackend(
+            [completion(word, index == 8) for index, word in enumerate(self.WORDS)]
+        )
+        create_debate_graph(create_lineup(backend, preset=preset), debate_protocol=protocol).invoke(
+            new_debate_state("ctx", max_rounds=2)
+        )
+        return backend.calls
+
+    def test_blind_advisors_see_no_same_round_advice(self):
+        calls = self.run_turn(DebateProtocol.BLIND)
+        seen = [(len(p["suggestions"]), len(p["transcript"])) for _, p in calls]
+        # propose, 3 advisors, review, 3 advisors, review
+        self.assertEqual(seen, [(0, 0), (0, 1), (0, 1), (0, 1), (3, 4), (0, 5), (0, 5), (0, 5), (3, 8)])
+        # Round 2 advisors see round 1 and the GM review, but not each other.
+        self.assertTrue(calls[5][1]["transcript"][-1].startswith("GM reviews and selects"))
+
+    def test_sequential_advisors_see_earlier_advice(self):
+        calls = self.run_turn(DebateProtocol.SEQUENTIAL)
+        seen = [(len(p["suggestions"]), len(p["transcript"])) for _, p in calls]
+        self.assertEqual(seen, [(0, 0), (0, 1), (1, 2), (2, 3), (3, 4), (0, 5), (1, 6), (2, 7), (3, 8)])
+
+    def test_default_is_sequential(self):
+        backend = RecordingSequenceBackend(
+            [completion(word, index == 8) for index, word in enumerate(self.WORDS)]
+        )
+        create_debate_graph(create_lineup(backend, preset="neutral")).invoke(new_debate_state("ctx", max_rounds=2))
+        self.assertEqual(len(backend.calls[2][1]["suggestions"]), 1)
+
+    def test_blind_game_logs_every_suggestion(self):
+        game = WordleGame(WordlePuzzle("0", "CIGAR"), allowed_guesses={"CIGAR", "RAISE", "SLATE"}, max_attempts=1)
+        backend = SequenceBackend([completion(w, i == 4) for i, w in enumerate(["RAISE", "SLATE", "RAISE", "SLATE", "SLATE"])])
+        with tempfile.TemporaryDirectory() as directory:
+            run = play_wordle_game(
+                game=game, bridge=WordleBridge(game), lineup=create_lineup(backend, preset="pilot-02"),
+                run=RunLog(metadata={}, path=Path(directory) / "run.json"),
+                max_rounds=1, max_repairs=1, debate_protocol=DebateProtocol.BLIND, raise_errors=False,
+            )
+        turn = run.data["turns"][0]
+        self.assertEqual(turn["final_action"], "SLATE")
+        self.assertEqual([s["advisor"] for s in turn["advisor_suggestions"]], ["bold", "cautious", "casual"])
+        self.assertEqual(turn["adopted_from"], ["bold", "casual"])
+
+    def test_solo_ignores_the_protocol(self):
+        backend = RecordingSequenceBackend([completion("SLATE", False)])
+        create_debate_graph(create_lineup(backend, preset="solo"), debate_protocol=DebateProtocol.BLIND).invoke(
+            new_debate_state("ctx", max_rounds=3)
+        )
+        self.assertEqual(set(backend.calls[0][1]), {"game_context", "task"})
 
 
 class TurnStatisticsTests(unittest.TestCase):

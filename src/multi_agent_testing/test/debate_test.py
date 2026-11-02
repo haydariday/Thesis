@@ -28,7 +28,7 @@ from ..games.wordle.bridge import WordleBridge
 from ..games.wordle.dataset import load_allowed_guesses, load_puzzle
 from ..games.wordle.engine import MAX_GUESS_LIMIT, STANDARD_GUESSES, WordleGame
 from ..orchestra.debate import create_debate_graph
-from ..orchestra.debate_context import new_debate_state
+from ..orchestra.debate_context import DebateProtocol, new_debate_state
 from ..orchestra.flow.sequential import recursion_limit
 from ..play import play_wordle_game
 from ..run_log import RunLog
@@ -158,6 +158,12 @@ def main() -> None:
         choices=[0, 1, 2],
         default=1,
         help="Maximum corrective responses per agent decision.",
+    )
+    parser.add_argument(
+        "--debate-protocol",
+        choices=[p.value for p in DebateProtocol],
+        default=DebateProtocol.SEQUENTIAL.value,
+        help="sequential (pilot) or blind: advisors of one round answer independently.",
     )
 
     add_persona_arguments(parser, default_preset="pilot-02")
@@ -312,6 +318,7 @@ def main() -> None:
                 "stream": args.stream,
                 "max_rounds": args.max_rounds,
                 "max_repairs": args.max_repairs,
+                "debate_protocol": args.debate_protocol,
                 "request_timeout": args.request_timeout,
                 "api_retries": args.api_retries,
                 "puzzle_id": puzzle.puzzle_id,
@@ -337,6 +344,7 @@ def main() -> None:
             run=run,
             max_rounds=args.max_rounds,
             max_repairs=args.max_repairs,
+            debate_protocol=DebateProtocol(args.debate_protocol),
             stream=args.stream,
             echo=True,
         )
@@ -361,6 +369,7 @@ def main() -> None:
         graph = create_debate_graph(
             lineup,
             stream=args.stream,
+            debate_protocol=DebateProtocol(args.debate_protocol),
         )
         debate_state = new_debate_state(
             (

@@ -143,6 +143,22 @@ class RunnerPersonaTest(unittest.TestCase):
             self.assertFalse(self.experiment.exists())
 
 
+    def test_blind_protocol_is_recorded_and_kept_on_resume(self):
+        self.start("--persona-preset", "pilot-02", "--debate-protocol", "blind")
+        self.assertEqual(self.config()["settings"]["debate_protocol"], "blind")
+        run = json.loads((self.experiment / "runs" / "puzzle-0-rep1-attempt1.json").read_text(encoding="utf-8"))
+        self.assertEqual(run["metadata"]["debate_protocol"], "blind")
+
+    def test_config_without_protocol_resumes_as_sequential(self):
+        self.start("--persona-preset", "pilot-02", "--max-runs", "0")
+        path = self.experiment / "experiment_config.json"
+        config = self.config()
+        del config["settings"]["debate_protocol"]
+        path.write_text(json.dumps(config), encoding="utf-8")
+        run_main("resume", "--experiment-dir", str(self.experiment))
+        run = json.loads((self.experiment / "runs" / "puzzle-0-rep1-attempt1.json").read_text(encoding="utf-8"))
+        self.assertEqual(run["metadata"]["debate_protocol"], "sequential")
+
     def test_deepseek_records_thinking_mode_and_key_name(self):
         # --allow-peak keeps the test from waiting when run in peak hours.
         self.start(
@@ -160,6 +176,7 @@ class RunnerPersonaTest(unittest.TestCase):
         self.assertTrue(settings["json_mode"])
         self.assertEqual(settings["thinking"], "disabled")
         self.assertEqual(settings["temperature"], 0.2)
+        self.assertEqual(settings["debate_protocol"], "sequential")
         self.assertEqual(settings["api_key_env"], "DEEPSEEK_API_KEY")
         run = json.loads((self.experiment / "runs" / "puzzle-0-rep1-attempt1.json").read_text(encoding="utf-8"))
         self.assertEqual(run["metadata"]["thinking"], "disabled")

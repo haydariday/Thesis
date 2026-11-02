@@ -9,7 +9,7 @@ from .games.wordle.bridge import WordleBridge
 from .games.wordle.candidates import filter_candidates, is_consistent
 from .games.wordle.engine import WordleGame
 from .orchestra.debate import create_debate_graph
-from .orchestra.debate_context import new_debate_state
+from .orchestra.debate_context import DebateProtocol, new_debate_state
 from .orchestra.flow.sequential import recursion_limit
 from .run_log import CallRecorder, RunLog
 
@@ -92,6 +92,7 @@ def play_wordle_game(
     run: RunLog,
     max_rounds: int,
     max_repairs: int,
+    debate_protocol: DebateProtocol = DebateProtocol.SEQUENTIAL,
     stream: bool = False,
     echo: bool = False,
     raise_errors: bool = True,
@@ -118,6 +119,7 @@ def play_wordle_game(
             validate_action=bridge.validate_action,
             max_repairs=max_repairs,
             recorder=recorder,
+            debate_protocol=debate_protocol,
         )
 
         while not game.done:

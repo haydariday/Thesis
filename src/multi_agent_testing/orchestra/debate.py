@@ -8,7 +8,7 @@ from ..agent.persona_spec import ActionRule
 from ..agent.personas import Lineup
 from ..decision import AgentDecision
 from ..run_log import CallRecorder
-from .debate_context import DebateState, NodeFn, Termination
+from .debate_context import DebateProtocol, DebateState, NodeFn, Termination
 from .flow.sequential import (
     FINALIZE,
     NEXT_ROUND,
@@ -28,8 +28,12 @@ def create_debate_graph(
     validate_action: Callable[[str], str] | None = None,
     max_repairs: int = 1,
     recorder: CallRecorder | None = None,
+    debate_protocol: DebateProtocol = DebateProtocol.SEQUENTIAL,
 ):
     """Build the debate using validated model decisions.
+
+    ``debate_protocol`` sets what an advisor sees of its own round
+    (:class:`DebateProtocol`); the GM always sees everything.
 
     A line-up without advisors gets the single-decision graph: the player
     sees the game state and its task only, with no debate fields.
@@ -93,15 +97,20 @@ def create_debate_graph(
         *,
         allow_stop: bool = False,
         action_rule: ActionRule = ActionRule.ANY,
+        blind: bool = False,
     ) -> AgentDecision:
+        # A blind advisor sees neither this round's suggestions nor the
+        # transcript lines they added.
+        suggestions = {} if blind else state["suggestions"]
+        transcript = state["transcript"][: state["round_start"]] if blind else state["transcript"]
         payload: dict = (
             {"game_context": state["context"], "task": task}
             if lineup.solo
             else {
                 "game_context": state["context"],
                 "proposal": state["proposal"],
-                "suggestions": state["suggestions"],
-                "transcript": state["transcript"],
+                "suggestions": suggestions,
+                "transcript": transcript,
                 "completed_rounds": state["round"],
                 "task": task,
             }
@@ -240,13 +249,17 @@ def create_debate_graph(
             "The advisors have not spoken yet.",
         )
 
+        transcript = state["transcript"] + [
+            f"GM proposes {decision.action}: {decision.reason}"
+        ]
         return {
             "proposal": decision.action,
             "initial_proposal": decision.action,
-            "transcript": state["transcript"] + [
-                f"GM proposes {decision.action}: {decision.reason}"
-            ],
+            "transcript": transcript,
+            "round_start": len(transcript),
         }
+
+    blind = debate_protocol == DebateProtocol.BLIND
 
     def advisor_node(agent: Agent) -> tuple[str, NodeFn]:
         spec = agent.persona
@@ -255,7 +268,7 @@ def create_debate_graph(
 
         def node(state: DebateState) -> dict:
             try:
-                decision = ask(agent, state, spec.task, action_rule=spec.action_rule)
+                decision = ask(agent, state, spec.task, action_rule=spec.action_rule, blind=blind)
             except RepairExhausted:
                 # Advice is optional: the GM reviews without this advisor.
                 return {
@@ -311,24 +324,28 @@ def create_debate_graph(
             )
         except RepairExhausted:
             # The standing proposal was already validated, so keep it.
+            transcript = state["transcript"] + [
+                f"GM review gave no valid decision; {state['proposal']} stands."
+            ]
             return {
                 "suggestions": {},
                 "round": state["round"] + 1,
                 "stop": False,
                 "fallbacks": state["fallbacks"] + ["gm_review_kept_proposal"],
-                "transcript": state["transcript"] + [
-                    f"GM review gave no valid decision; {state['proposal']} stands."
-                ],
+                "transcript": transcript,
+                "round_start": len(transcript),
             }
 
+        transcript = state["transcript"] + [
+            f"GM reviews and selects {decision.action}: {decision.reason}"
+        ]
         return {
             "proposal": decision.action,
             "suggestions": {},
             "round": state["round"] + 1,
             "stop": decision.stop,
-            "transcript": state["transcript"] + [
-                f"GM reviews and selects {decision.action}: {decision.reason}"
-            ],
+            "transcript": transcript,
+            "round_start": len(transcript),
         }
 
     def route_after_review(state: DebateState) -> str:

@@ -2,6 +2,20 @@ from enum import StrEnum
 from typing import Any, NotRequired, Protocol, TypedDict
 
 
+class DebateProtocol(StrEnum):
+    """What an advisor sees of the current round.
+
+    ``sequential`` (the pilot protocol): each advisor reads the suggestions
+    the earlier advisors gave in the same round. ``blind``: each advisor
+    reads only the GM's current proposal and the transcript up to the start
+    of the round, so the advisors of one round answer independently. The GM
+    review sees every suggestion in both protocols.
+    """
+
+    SEQUENTIAL = "sequential"
+    BLIND = "blind"
+
+
 class Termination(StrEnum):
     """Why the debate loop stopped."""
 
@@ -39,6 +53,9 @@ class DebateState(TypedDict):
     # Recovery steps taken this turn, e.g. "abstained:bold".
     fallbacks: list[str]
     transcript: list[str]
+    # Transcript length when the current round's advisors began; a blind
+    # advisor sees only transcript[:round_start].
+    round_start: int
     final_action: str
     round: int
     max_rounds: int
@@ -57,6 +74,7 @@ def new_debate_state(context: str, max_rounds: int) -> DebateState:
         "suggestion_log": [],
         "fallbacks": [],
         "transcript": [],
+        "round_start": 0,
         "final_action": "",
         "round": 0,
         "max_rounds": max_rounds,
