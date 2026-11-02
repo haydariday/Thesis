@@ -14,7 +14,8 @@ Final study, phase F2. Standard library only. Run as
 
 It writes three files into the output directory:
 
-* ``final.csv`` - 25 puzzles per quartile (100), seed 20261103.
+* ``final.csv`` - 33, 33 and 34 puzzles from terciles T1, T2 and T3 (100),
+  seed 20261103.
 * ``final-smoke.csv`` - 2 puzzles per quartile (8) from the pilot-02 wide
   manifest, seed 20261104, so smoke games never touch a final puzzle.
 * ``final.summary.json`` - input hashes, pool sizes, seeds and selected ids.
@@ -23,16 +24,18 @@ Sampling pool
 -------------
 The pool rule is that of :mod:`manifest_pilot02`: eligible, unique answer and
 not in any ``--exclude-manifest``. Every played pilot manifest must be
-excluded. The draw is stratified by quartile, which keeps the human range
-covered evenly; each row also carries its tercile, the category scheme of the
-final study. The clean CSV hash must match the one frozen in both
-``quartiles.json`` and ``terciles.json``.
+excluded. The draw is stratified by tercile, the category scheme of the final
+study, so every category holds a third of the puzzles; each row keeps its
+quartile for the sensitivity check. The clean CSV hash must match the one
+frozen in both ``quartiles.json`` and ``terciles.json``.
 
 Selection
 ---------
-The final draw is :func:`manifest_pilot02.select_manifests` with one draw:
-``random.Random(20261103)`` takes ``rng.sample(pool, 25)`` from D1, D2, D3 and
-D4 in that order. The smoke draw groups the ``--smoke-source`` puzzles by
+The final draw groups the pool by tercile, orders each group by integer
+puzzle id, and lets one ``random.Random(20261103)`` take
+``rng.sample(group, n)`` from T1, T2 and T3 in that order, with ``n`` from
+``FINAL_PER_TERCILE`` (the hardest tercile gets the hundredth puzzle). The
+smoke draw groups the ``--smoke-source`` puzzles by
 quartile, orders each group by integer puzzle id and takes
 ``random.Random(20261104).sample(group, 2)`` in the same order. Both outputs
 are ordered by integer puzzle id and identical on every re-run.
@@ -51,9 +54,10 @@ from typing import cast
 
 from . import manifest_pilot02 as p2
 from .quartiles import QUARTILE_LABELS, RankedPuzzle
-from .terciles import assign_terciles
+from .terciles import TERCILE_LABELS, assign_terciles
 
-FINAL = p2.ExperimentDraw(name="final", seed=20261103, per_quartile=25)
+FINAL = p2.ExperimentDraw(name="final", seed=20261103, per_quartile=0)
+FINAL_PER_TERCILE: dict[str, int] = {"T1": 33, "T2": 33, "T3": 34}
 SMOKE = p2.ExperimentDraw(name="final-smoke", seed=20261104, per_quartile=2)
 
 MANIFEST_COLUMNS: tuple[str, ...] = (*p2.MANIFEST_COLUMNS, "tercile")
@@ -71,6 +75,29 @@ def tercile_labels(rows: Iterable[Mapping[str, str]], terciles: Mapping[str, obj
     if [round(c, 6) for c in spec.cut_points] != frozen_cuts or list(spec.sizes) != frozen_sizes:
         raise ValueError("Terciles of the clean CSV do not match terciles.json.")
     return labels
+
+
+def select_final(
+    pool: Mapping[str, Sequence[Mapping[str, str]]],
+    tercile_of: Mapping[str, str],
+    per_tercile: Mapping[str, int] = FINAL_PER_TERCILE,
+    seed: int = FINAL.seed,
+) -> list[Mapping[str, str]]:
+    """Tercile-stratified draw from the (quartile-grouped) sampling pool."""
+
+    groups: dict[str, list[Mapping[str, str]]] = {label: [] for label in TERCILE_LABELS}
+    for rows in pool.values():
+        for row in rows:
+            groups[tercile_of[row["puzzle_id"]]].append(row)
+
+    rng = random.Random(seed)
+    picks: list[Mapping[str, str]] = []
+    for label in TERCILE_LABELS:
+        group = sorted(groups[label], key=lambda row: int(row["puzzle_id"]))
+        if len(group) < per_tercile[label]:
+            raise ValueError(f"final: tercile {label} has {len(group)} puzzles, needs {per_tercile[label]}.")
+        picks.extend(rng.sample(group, per_tercile[label]))
+    return sorted(picks, key=lambda row: int(row["puzzle_id"]))
 
 
 def select_smoke(
@@ -129,12 +156,12 @@ def _check_frozen(clean_hash: str, frozen_json: Path) -> dict:
 
 
 def _output_entry(path: Path, draw: p2.ExperimentDraw, rows: Sequence[Mapping[str, str]],
-                  terciles: Mapping[str, str]) -> dict[str, object]:
+                  terciles: Mapping[str, str], stratum: str) -> dict[str, object]:
     return {
         "path": path.as_posix(),
         "sha256": p2._sha256(path),
         "seed": draw.seed,
-        "per_quartile": draw.per_quartile,
+        "stratified_by": stratum,
         "puzzle_ids": {
             label: [row["puzzle_id"] for row in rows if row["quartile"] == label]
             for label in QUARTILE_LABELS
@@ -168,7 +195,7 @@ def build_manifests(
         raise ValueError(f"{smoke_source} must also be passed as --exclude-manifest.")
 
     pool = p2.sampling_pool(clean_rows, excluded_ids)
-    final_rows = p2.select_manifests(pool, (FINAL,))[FINAL.name]
+    final_rows = select_final(pool, tercile_of)
 
     by_id = {row["puzzle_id"]: row for row in clean_rows}
     smoke_picks = select_smoke(p2.load_clean_rows(smoke_source))
@@ -196,15 +223,20 @@ def build_manifests(
         },
         "rules": {
             "pool": "eligible, duplicate_answer == False, not in an exclude manifest",
-            "order": "each quartile pool sorted by int(puzzle_id); draws in D1..D4 order",
+            "final": "stratified by tercile, per_tercile counts, each group sorted by int(puzzle_id), draws in T1..T3 order",
+            "per_tercile": FINAL_PER_TERCILE,
             "smoke": "stratified draw from the smoke source, which is also excluded from the final pool",
         },
         "excluded_ids": sorted(excluded_ids, key=int),
         "pool_sizes": {label: len(pool[label]) for label in QUARTILE_LABELS},
+        "pool_sizes_by_tercile": {
+            label: sum(1 for rows in pool.values() for row in rows if tercile_of[row["puzzle_id"]] == label)
+            for label in TERCILE_LABELS
+        },
         "pool_total": sum(len(group) for group in pool.values()),
         "outputs": {
-            FINAL.name: _output_entry(final_path, FINAL, final_rows, tercile_of),
-            SMOKE.name: _output_entry(smoke_path, SMOKE, smoke_rows, tercile_of),
+            FINAL.name: _output_entry(final_path, FINAL, final_rows, tercile_of, "tercile"),
+            SMOKE.name: _output_entry(smoke_path, SMOKE, smoke_rows, tercile_of, "quartile (2 each)"),
         },
     }
     summary_path = output_dir / "final.summary.json"
@@ -215,7 +247,7 @@ def build_manifests(
 def main() -> None:
     """CLI entry point."""
 
-    parser = argparse.ArgumentParser(description="Select the final and smoke manifests by quartile.")
+    parser = argparse.ArgumentParser(description="Select the final manifest by tercile and the smoke manifest by quartile.")
     parser.add_argument("--clean-csv", type=Path, required=True,
                         help="Cleaned 7-bin human data from phase P1.")
     parser.add_argument("--quartiles", type=Path, required=True,

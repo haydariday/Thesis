@@ -25,6 +25,28 @@ def _read(path: Path) -> list[dict[str, str]]:
         return list(csv.DictReader(file))
 
 
+class SelectFinalTest(unittest.TestCase):
+    POOL = {"D1": [{"puzzle_id": str(i)} for i in range(30)]}
+    TERCILE_OF = {str(i): ("T1", "T2", "T3")[i % 3] for i in range(30)}
+
+    def test_counts_per_tercile_and_order(self):
+        rows = m.select_final(self.POOL, self.TERCILE_OF, {"T1": 3, "T2": 2, "T3": 4}, seed=1)
+        counts = {t: sum(1 for r in rows if self.TERCILE_OF[r["puzzle_id"]] == t) for t in ("T1", "T2", "T3")}
+        self.assertEqual(counts, {"T1": 3, "T2": 2, "T3": 4})
+        ids = [int(pid) for pid in _ids(rows)]
+        self.assertEqual(ids, sorted(ids))
+
+    def test_input_order_does_not_matter(self):
+        reversed_pool = {"D1": list(reversed(self.POOL["D1"]))}
+        counts = {"T1": 3, "T2": 3, "T3": 3}
+        self.assertEqual(_ids(m.select_final(self.POOL, self.TERCILE_OF, counts, seed=5)),
+                         _ids(m.select_final(reversed_pool, self.TERCILE_OF, counts, seed=5)))
+
+    def test_too_small_tercile_raises(self):
+        with self.assertRaises(ValueError):
+            m.select_final(self.POOL, self.TERCILE_OF, {"T1": 11, "T2": 1, "T3": 1}, seed=1)
+
+
 class SelectSmokeTest(unittest.TestCase):
     ROWS = [{"puzzle_id": str(i * 10 + j), "quartile": label}
             for i, label in enumerate(QUARTILE_LABELS) for j in range(5)]
@@ -73,8 +95,10 @@ class RealManifestTest(unittest.TestCase):
 
         self.assertEqual(len(final), 100)
         self.assertEqual(len(smoke), 8)
+        for label, count in m.FINAL_PER_TERCILE.items():
+            self.assertEqual(sum(1 for row in final if row["tercile"] == label), count)
+        self.assertEqual(m.FINAL_PER_TERCILE, {"T1": 33, "T2": 33, "T3": 34})
         for label in QUARTILE_LABELS:
-            self.assertEqual(sum(1 for row in final if row["quartile"] == label), 25)
             self.assertEqual(sum(1 for row in smoke if row["quartile"] == label), 2)
 
         pilot_ids = {pid for path in PILOTS for pid in _ids(_read(path))}

@@ -11,9 +11,9 @@ The pilot validated the persona-based debate on its own. The final study adds tw
 | Model settings | Configuration vB for every condition: `deepseek-flash` with thinking `enabled`, reasoning effort `low`, `max_tokens=4096`, JSON mode, no temperature. |
 | Guess limit | 6, hidden from the agents as in the pilot. A loss scores 7, the same scale as the human data. |
 | Conditions | C1 persona debate, C2 single agent, C3 debate without personas (Section 2). |
-| Size | 100 fresh puzzles (25 per human quartile) × 10 runs × 3 conditions = 3,000 games (Section 5). |
+| Size | 100 fresh puzzles (33, 33 and 34 per human tercile) × 10 runs × 3 conditions = 3,000 games (Section 5). |
 | Pairing | Every condition plays the same 100 puzzles with the same 10 repetitions, so every comparison is paired by puzzle. |
-| Difficulty categories | Terciles (cut-points 4.07 and 4.42 over the 1,861 eligible puzzles), as decided in the progress report on 2026-10-23. Quartiles stay for sampling and as a sensitivity check. Adopted at F0, frozen at F1 in `terciles.json`. |
+| Difficulty categories | Terciles (cut-points 4.07 and 4.42 over the 1,861 eligible puzzles), as decided in the progress report on 2026-10-23. The puzzles are drawn by tercile (changed from quartiles on 2 November 2026, before any final game). Quartiles stay as a sensitivity check. Adopted at F0, frozen at F1 in `terciles.json`. |
 | Reporting | Values with p-values, without resampling. Spearman ρ and Pearson r carry their t-test p-values as in the pilot, paired condition contrasts use the Wilcoxon signed-rank test over puzzles, and the persona checks use rank tests over games (Section 7). Decided on 2 November 2026, replacing the bootstrap intervals of the draft. |
 | Budget | About $55 including retries and smoke tests. Stop and review above $70 (Section 6.3). Adopted at F0. |
 | Pooling | None. The new code makes this a new configuration, so no pilot game counts toward the final study (README reuse rule 3). |
@@ -81,9 +81,9 @@ How the baselines enter each question:
 ## 4. Puzzles
 
 - **Pool:** the 1,861 eligible puzzles of `wordle_human_clean.csv`, minus the pilot-01 puzzles, both pilot-02 manifests and duplicate answers.
-- **Draw:** 25 puzzles per human quartile, 100 in total, with seed `20261103`. Quartiles keep the human difficulty range covered evenly, even though the categories are scored in terciles.
+- **Draw:** 33 puzzles from T1, 33 from T2 and 34 from T3, 100 in total, with seed `20261103`. The hardest tercile gets the hundredth puzzle, since its range is the widest. Stratifying by the category scheme that RQ2 scores gives every category a third of the puzzles. The first draw (25 per quartile) gave 35, 31 and 34 per tercile, since the tercile cuts fall inside D2 and D3, and it was replaced before any final game.
 - **Smoke manifest:** 8 puzzles (2 per quartile, seed `20261104`) taken from the pilot-02 wide manifest, so the smoke games never touch a final puzzle.
-- **Drawn at F2:** pool 1,729 after excluding the 80 pilot puzzles. The final set holds 35 T1, 31 T2 and 34 T3 puzzles (`experiments/manifests/final.summary.json`).
+- **Drawn at F2:** pool 1,729 after excluding the 80 pilot puzzles. The final set holds 25 D1, 22 D2, 28 D3 and 25 D4 puzzles. Human means range from 3.40 to 4.05 in T1, 4.08 to 4.40 in T2 and 4.43 to 6.09 in T3 (`experiments/manifests/final.summary.json`).
 - Agents never see the answer word, the guess limit or any human result.
 
 ## 5. Sample-size justification
@@ -240,7 +240,7 @@ uv run python -m multi_agent_testing.experiment.analysis_final \
 |---|---|---|---|---|---|
 | **F0** Decisions | Fix what cannot change after the runs start | Confirm the RQ wording and the role of the baselines (Section 3), the C2 and C3 instruction drafts, terciles as the category scheme and the budget with the supervisor. Update the roadmap, README and CLAUDE.md scope line. | The decisions are recorded in Section 1 and the docs no longer say "no single-agent condition". | offline | S |
 | **F1** Terciles | Freeze the category cut-points | Add a rank-based tercile split next to `quartiles.py`, written to `src/data/processed/terciles.json`. | Group sizes differ by at most one, the cut-points are 4.07 and 4.42, and a test checks the mapping rule. | offline | S |
-| **F2** Manifests | Select the final and smoke puzzles | Extend the manifest tool with a single stratified draw (25 per quartile, seed `20261103`) that excludes all pilot manifests. Write the 8-puzzle smoke manifest from the pilot-02 wide manifest. | `final.csv` (100 rows) and `final-smoke.csv` (8 rows) exist, and tests confirm no overlap with any pilot manifest and identical output on a re-run. | offline | S |
+| **F2** Manifests | Select the final and smoke puzzles | Extend the manifest tool with a single stratified draw (33/33/34 per tercile, seed `20261103`) that excludes all pilot manifests. Write the 8-puzzle smoke manifest from the pilot-02 wide manifest. | `final.csv` (100 rows) and `final-smoke.csv` (8 rows) exist, and tests confirm no overlap with any pilot manifest and identical output on a re-run. | offline | S |
 | **F3** Single-agent mode | Support C2 | Allow a line-up without advisors, in which one decision per turn is validated and played. Add the `solo_player` persona and its preset. | Scripted tests cover a full solo game, its repair path and its call count (one call per turn without repairs). | offline | M |
 | **F4** Neutral preset | Support C3 | Add `neutral_advisor` under three keys and a preset that pairs them with the neutral GM. | The preset builds three advisors with identical instructions, and the pilot-02 registry text is unchanged (`personas_test`). | offline | S |
 | **F5** Statistics for all conditions | Log comparable turn statistics | Make `turn_statistics` and `persona_stats` work without advisors (C2) and with neutral keys (C3). Add the per-game persona tests (Wilcoxon for Cautious − Bold, Friedman across advisors). | Scripted tests cover all three conditions, and a test confirms the answer word never appears in any prompt in any condition. | offline | M |

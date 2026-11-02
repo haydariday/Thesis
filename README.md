@@ -37,7 +37,7 @@ Global docs: `Wordle Multi-Agent Playtesting Research Context and Experiment Roa
     --output-dir experiments/manifests
   ```
 
-- Final-study manifests (F2): `experiments/manifests/final.csv` (100, 25 per quartile, seed `20261103`, with a `tercile` column) and `final-smoke.csv` (8, 2 per quartile from the pilot-02 wide manifest, seed `20261104`), plus `final.summary.json`. Pool = eligible, unique answer, not in any pilot manifest (1,729). Rebuild:
+- Final-study manifests (F2): `experiments/manifests/final.csv` (100, 33/33/34 per tercile T1/T2/T3, seed `20261103`, with `quartile` and `tercile` columns) and `final-smoke.csv` (8, 2 per quartile from the pilot-02 wide manifest, seed `20261104`), plus `final.summary.json`. Pool = eligible, unique answer, not in any pilot manifest (1,729). Rebuild:
 
   ```bash
   uv run python -m multi_agent_testing.experiment.manifest_final \
