@@ -76,7 +76,8 @@ How the baselines enter each question:
 
 - **Pool:** the 1,861 eligible puzzles of `wordle_human_clean.csv`, minus the pilot-01 puzzles, both pilot-02 manifests and duplicate answers.
 - **Draw:** 25 puzzles per human quartile, 100 in total, with seed `20261103`. Quartiles keep the human difficulty range covered evenly, even though the categories are scored in terciles.
-- **Smoke manifest:** 8 puzzles (2 per quartile) taken from the pilot-02 wide manifest, so the smoke games never touch a final puzzle.
+- **Smoke manifest:** 8 puzzles (2 per quartile, seed `20261104`) taken from the pilot-02 wide manifest, so the smoke games never touch a final puzzle.
+- **Drawn at F2:** pool 1,729 after excluding the 80 pilot puzzles. The final set holds 35 T1, 31 T2 and 34 T3 puzzles (`experiments/manifests/final.summary.json`).
 - Agents never see the answer word, the guess limit or any human result.
 
 ## 5. Sample-size justification
