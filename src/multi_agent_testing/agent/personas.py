@@ -3,6 +3,11 @@
 Personas are data (:class:`PersonaSpec`), so a preset or an advisor list picks
 the debate line-up without editing the graph. The ``pilot-01`` preset keeps the
 exact pilot-01 instructions and tasks, so pilot-01 can still be re-run.
+
+The final study adds two baselines. ``solo`` is a single player with no
+advisors (C2), and its line-up is played by a one-decision graph. ``neutral``
+pairs the neutral GM with three advisors that share one instruction without a
+playstyle (C3).
 """
 
 from collections.abc import Mapping, Sequence
@@ -132,6 +137,18 @@ _PERSONA_LIST: tuple[PersonaSpec, ...] = (
             "Set stop to false."
         ),
     ),
+    PersonaSpec(
+        key="solo_player",
+        display_name="Player",
+        slot=Slot.PLAYER,
+        instruction=(
+            "You are a player in a Wordle playtesting system. "
+            "Choose the next guess based on the available game state "
+            "and explain your choice briefly. "
+            "Do not invent game feedback."
+        ),
+        task="Choose the next guess and explain why. Set stop to false.",
+    ),
 )
 
 PERSONAS: dict[str, PersonaSpec] = {spec.key: spec for spec in _PERSONA_LIST}
@@ -139,6 +156,8 @@ PERSONAS: dict[str, PersonaSpec] = {spec.key: spec for spec in _PERSONA_LIST}
 
 @dataclass(frozen=True)
 class Preset:
+    # The deciding agent: a GM persona, or a player persona when there are
+    # no advisors.
     gm: str
     advisors: tuple[str, ...]
 
@@ -147,16 +166,24 @@ PRESETS: dict[str, Preset] = {
     "pilot-01": Preset(gm="neutral_gm_v1", advisors=("negative", "positive")),
     "pilot-02": Preset(gm="neutral_gm", advisors=("bold", "cautious", "casual")),
     "pilot-02-core": Preset(gm="neutral_gm", advisors=("bold", "cautious")),
+    "solo": Preset(gm="solo_player", advisors=()),
 }
 
 
 @dataclass(frozen=True)
 class Lineup:
-    """The GM and the advisors in speaking order."""
+    """The GM and the advisors in speaking order.
+
+    A single-agent line-up has no advisors; ``gm`` is then its player.
+    """
 
     gm: Agent
     advisors: tuple[Agent, ...]
     preset: str | None = None
+
+    @property
+    def solo(self) -> bool:
+        return not self.advisors
 
     @property
     def agents(self) -> tuple[Agent, ...]:
@@ -188,7 +215,8 @@ class Lineup:
 
 
 def _role_for(spec: PersonaSpec) -> AgentRole:
-    return AgentRole.GM if spec.slot == Slot.GM else AgentRole(spec.key)
+    # The player decides each turn as the GM does, so its calls log as "gm".
+    return AgentRole.GM if spec.slot in (Slot.GM, Slot.PLAYER) else AgentRole(spec.key)
 
 
 def _lookup(key: str, slot: Slot) -> PersonaSpec:
@@ -220,7 +248,9 @@ def create_lineup(
     """Build the GM and ordered advisors from a preset or explicit keys.
 
     Give either ``preset`` or ``advisors``. ``gm`` overrides the preset's GM
-    and defaults to ``neutral_gm`` when only ``advisors`` is given.
+    and defaults to ``neutral_gm`` when only ``advisors`` is given. A line-up
+    without advisors needs a player persona as its ``gm``, and a player never
+    gets advisors.
     """
 
     if (preset is None) == (advisors is None):
@@ -236,7 +266,8 @@ def create_lineup(
         gm_key = gm or "neutral_gm"
         advisor_keys = tuple(advisors or ())
 
-    if not advisor_keys:
+    lead_slot = Slot.GM if advisor_keys else Slot.PLAYER
+    if not advisor_keys and gm_key in PERSONAS and PERSONAS[gm_key].slot != Slot.PLAYER:
         raise ValueError("At least one advisor is required.")
     if len(set(advisor_keys)) != len(advisor_keys):
         raise ValueError(f"Advisors must not repeat: {', '.join(advisor_keys)}.")
@@ -245,7 +276,7 @@ def create_lineup(
         backend = ScriptedBackend()
 
     return Lineup(
-        gm=build_agent(_lookup(gm_key, Slot.GM), backend),
+        gm=build_agent(_lookup(gm_key, lead_slot), backend),
         advisors=tuple(build_agent(_lookup(key, Slot.ADVISOR), backend) for key in advisor_keys),
         preset=preset,
     )

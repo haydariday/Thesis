@@ -18,7 +18,7 @@ def add_persona_arguments(
     """
 
     advisors = [key for key, spec in PERSONAS.items() if spec.slot == Slot.ADVISOR]
-    gms = [key for key, spec in PERSONAS.items() if spec.slot == Slot.GM]
+    gms = [key for key, spec in PERSONAS.items() if spec.slot in (Slot.GM, Slot.PLAYER)]
 
     group = parser.add_mutually_exclusive_group(required=default_preset is None)
     group.add_argument(
@@ -34,7 +34,10 @@ def add_persona_arguments(
     parser.add_argument(
         "--gm",
         choices=gms,
-        help="GM persona; overrides the preset's GM (default with --advisors: neutral_gm).",
+        help=(
+            "GM persona; overrides the preset's GM (default with --advisors: neutral_gm). "
+            "A player persona needs a preset without advisors."
+        ),
     )
 
 

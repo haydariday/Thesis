@@ -44,6 +44,8 @@ Instruction draft (`solo_player`, frozen at F8):
 
 This text reuses the neutral GM wording without the debate references, so the only difference from C3's GM is the missing debate.
 
+Implemented at F3 as preset `solo` (persona `solo_player`, slot `player`). Task draft: "Choose the next guess and explain why. Set stop to false." The player's request holds only the game state and the task, with no proposal, suggestions or transcript. Its system prompt also leaves out the sentence on advisors and the schema description ("Shared debate response …"), which every debate agent still receives unchanged. Its calls are logged with role `gm`, and each turn ends with termination `single_decision`.
+
 ### 2.2 C3 neutral advisors
 
 C3 keeps the GM and the three advisor slots of C1. The three advisors share one instruction with no playstyle, under three keys (`neutral_1`, `neutral_2`, `neutral_3`) so the debate and the statistics still tell them apart.

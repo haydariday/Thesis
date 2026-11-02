@@ -11,6 +11,8 @@ from langgraph.graph import END, START, StateGraph
 from ..debate_context import DebateState, NodeFn, RouterFn
 
 PROPOSE = "gm_propose"
+# The single node of a line-up without advisors.
+DECIDE = "player_decide"
 REVIEW = "gm_review"
 FINALIZE = "finalize"
 # Router result that starts another round at the first advisor.
@@ -64,6 +66,21 @@ def build_sequential_graph(
         route_after_review,
         {NEXT_ROUND: names[0], FINALIZE: FINALIZE},
     )
+    builder.add_edge(FINALIZE, END)
+
+    return builder.compile()
+
+
+def build_single_graph(*, decide: NodeFn, finalize: NodeFn):
+    """Wire decide -> finalize: one decision per turn, no debate."""
+
+    builder = StateGraph(DebateState)
+
+    builder.add_node(DECIDE, decide)
+    builder.add_node(FINALIZE, finalize)
+
+    builder.add_edge(START, DECIDE)
+    builder.add_edge(DECIDE, FINALIZE)
     builder.add_edge(FINALIZE, END)
 
     return builder.compile()

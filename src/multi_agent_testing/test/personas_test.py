@@ -33,7 +33,8 @@ class TaskRecordingBackend:
 class RegistryTest(unittest.TestCase):
     def test_presets_reference_known_personas_in_the_right_slot(self):
         for name, preset in PRESETS.items():
-            self.assertEqual(PERSONAS[preset.gm].slot, Slot.GM, name)
+            lead = Slot.GM if preset.advisors else Slot.PLAYER
+            self.assertEqual(PERSONAS[preset.gm].slot, lead, name)
             for key in preset.advisors:
                 self.assertEqual(PERSONAS[key].slot, Slot.ADVISOR, name)
 
@@ -53,6 +54,11 @@ class RegistryTest(unittest.TestCase):
             PersonaSpec(key="x", display_name="X", slot=Slot.ADVISOR, instruction="i")
         with self.assertRaises(ValueError):
             PersonaSpec(key="y", display_name="Y", slot=Slot.GM, instruction="i", task="t")
+        with self.assertRaises(ValueError):
+            PersonaSpec(key="z", display_name="Z", slot=Slot.PLAYER, instruction="i")
+        with self.assertRaises(ValueError):
+            PersonaSpec(key="w", display_name="W", slot=Slot.PLAYER, instruction="i", task="t",
+                        action_rule=ActionRule.MUST_EQUAL)
 
 
 class LineupTest(unittest.TestCase):
@@ -86,10 +92,49 @@ class LineupTest(unittest.TestCase):
             {"advisors": ["unknown"]},
             {"advisors": ["neutral_gm"]},
             {"advisors": ["bold"], "gm": "bold"},
+            {"advisors": ["bold"], "gm": "solo_player"},
+            {"preset": "pilot-02", "gm": "solo_player"},
+            {"preset": "solo", "gm": "neutral_gm"},
         ]
         for kwargs in cases:
             with self.subTest(kwargs=kwargs), self.assertRaises(ValueError):
                 create_lineup(**kwargs)
+
+
+class SoloLineupTest(unittest.TestCase):
+    def test_solo_preset_has_one_player(self):
+        lineup = create_lineup(preset="solo")
+        self.assertTrue(lineup.solo)
+        self.assertEqual(lineup.advisors, ())
+        self.assertEqual(lineup.gm.persona, PERSONAS["solo_player"])
+        self.assertEqual(lineup.gm.role, AgentRole.GM)
+        self.assertFalse(create_lineup(preset="pilot-02").solo)
+
+    def test_explicit_empty_advisors_need_a_player(self):
+        self.assertTrue(create_lineup(advisors=[], gm="solo_player").solo)
+        with self.assertRaises(ValueError):
+            create_lineup(advisors=[], gm="neutral_gm")
+
+    def test_player_prompt_names_no_debate(self):
+        backend = TaskRecordingBackend()
+        lineup = create_lineup(backend, preset="solo")
+        create_debate_graph(lineup).invoke(new_debate_state("start", max_rounds=3))
+        self.assertEqual(len(backend.tasks), 1)
+        system, task = backend.tasks[0]
+        self.assertEqual(task, PERSONAS["solo_player"].task)
+        for word in ("advisor", "debate", "GM"):
+            self.assertNotIn(word, system + task)
+
+    def test_debate_prompts_keep_the_stop_rule(self):
+        backend = TaskRecordingBackend()
+        create_debate_graph(create_lineup(backend, preset="pilot-02")).invoke(
+            new_debate_state("start", max_rounds=1)
+        )
+        for system, _ in backend.tasks:
+            self.assertTrue(system.endswith(
+                "Keep reason short: at most two sentences and about 40 words. "
+                "Advisors must set stop to false."
+            ))
 
 
 class LineupConfigTest(unittest.TestCase):

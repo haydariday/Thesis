@@ -9,7 +9,12 @@ from ..agent.personas import Lineup
 from ..decision import AgentDecision
 from ..run_log import CallRecorder
 from .debate_context import DebateState, NodeFn, Termination
-from .flow.sequential import FINALIZE, NEXT_ROUND, build_sequential_graph
+from .flow.sequential import (
+    FINALIZE,
+    NEXT_ROUND,
+    build_sequential_graph,
+    build_single_graph,
+)
 
 
 class RepairExhausted(ValueError):
@@ -24,7 +29,11 @@ def create_debate_graph(
     max_repairs: int = 1,
     recorder: CallRecorder | None = None,
 ):
-    """Build the debate using validated model decisions."""
+    """Build the debate using validated model decisions.
+
+    A line-up without advisors gets the single-decision graph: the player
+    sees the game state and its task only, with no debate fields.
+    """
 
     gm = lineup.gm
 
@@ -85,14 +94,18 @@ def create_debate_graph(
         allow_stop: bool = False,
         action_rule: ActionRule = ActionRule.ANY,
     ) -> AgentDecision:
-        payload = {
-            "game_context": state["context"],
-            "proposal": state["proposal"],
-            "suggestions": state["suggestions"],
-            "transcript": state["transcript"],
-            "completed_rounds": state["round"],
-            "task": task,
-        }
+        payload: dict = (
+            {"game_context": state["context"], "task": task}
+            if lineup.solo
+            else {
+                "game_context": state["context"],
+                "proposal": state["proposal"],
+                "suggestions": state["suggestions"],
+                "transcript": state["transcript"],
+                "completed_rounds": state["round"],
+                "task": task,
+            }
+        )
 
         def display_chunk(chunk: str) -> None:
             print(chunk, end="", flush=True)
@@ -333,6 +346,26 @@ def create_debate_graph(
                 else Termination.MAX_ROUNDS
             ),
         }
+
+    def player_decide(state: DebateState) -> dict:
+        decision = ask(gm, state, gm.persona.task)
+
+        return {
+            "proposal": decision.action,
+            "initial_proposal": decision.action,
+            "transcript": state["transcript"] + [
+                f"{gm.name} chooses {decision.action}: {decision.reason}"
+            ],
+        }
+
+    def finalize_single(state: DebateState) -> dict:
+        return {
+            "final_action": state["proposal"],
+            "termination": Termination.SINGLE_DECISION,
+        }
+
+    if lineup.solo:
+        return build_single_graph(decide=player_decide, finalize=finalize_single)
 
     return build_sequential_graph(
         gm_propose=gm_propose,

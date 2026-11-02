@@ -538,6 +538,64 @@ class DebateFlowTests(unittest.TestCase):
         self.assertEqual(usage["calls_with_usage"], 1)
         self.assertEqual(usage["calls_missing_usage"], 1)
 
+    def play_solo(self, backend, *, max_attempts: int = 1, max_repairs: int = 1) -> RunLog:
+        game = WordleGame(
+            WordlePuzzle("0", "CIGAR"),
+            allowed_guesses={"CIGAR", "RAISE", "SLATE", "VIRAL"},
+            max_attempts=max_attempts,
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            return play_wordle_game(
+                game=game,
+                bridge=WordleBridge(game),
+                lineup=create_lineup(backend, preset="solo"),
+                run=self.make_run(directory),
+                max_rounds=3,
+                max_repairs=max_repairs,
+                raise_errors=False,
+            )
+
+    def test_solo_game_makes_one_call_per_turn(self):
+        backend = RecordingSequenceBackend(
+            [completion("RAISE", False), completion("VIRAL", False), completion("CIGAR", False)]
+        )
+        run = self.play_solo(backend, max_attempts=6)
+
+        self.assertEqual(run.data["status"], "completed")
+        self.assertTrue(run.data["outcome"]["won"])
+        self.assertEqual(run.data["outcome"]["guesses_used"], 3)
+        self.assertEqual(len(backend.calls), 3)
+        self.assertEqual(run.data["counters"]["agent_calls"], 3)
+        self.assertEqual({call["role"] for call in run.data["calls"]}, {"gm"})
+        for _, payload in backend.calls:
+            self.assertEqual(set(payload), {"game_context", "task"})
+
+        turn = run.data["turns"][0]
+        self.assertEqual(turn["termination"], "single_decision")
+        self.assertEqual(turn["debate_rounds"], 0)
+        self.assertFalse(turn["gm_requested_stop"])
+        self.assertFalse(turn["round_cap_reached"])
+        self.assertEqual(turn["transcript"], ["Player chooses RAISE: test reason"])
+
+    def test_solo_invalid_reply_is_repaired(self):
+        backend = RecordingSequenceBackend(
+            [completion("AUDIO", False), completion("RAISE", True), completion("RAISE", False)]
+        )
+        run = self.play_solo(backend, max_repairs=2)
+
+        self.assertEqual(run.data["status"], "completed")
+        self.assertEqual(run.data["turns"][0]["final_action"], "RAISE")
+        self.assertEqual(len(backend.calls), 3)
+        self.assertEqual(run.data["counters"]["rejected_responses"], 2)
+        self.assertIn("repair", backend.calls[1][1])
+
+    def test_solo_repair_exhaustion_fails_the_game(self):
+        backend = SequenceBackend([completion("AUDIO", False), completion("AUDIO", False)])
+        run = self.play_solo(backend)
+
+        self.assertEqual(run.data["status"], "failed")
+        self.assertEqual(run.data["error"]["type"], "RepairExhausted")
+
     def test_observation_hides_answer(self):
         bridge = WordleBridge(self.make_game(max_attempts=6))
         self.assertNotIn("CIGAR", bridge.observe())

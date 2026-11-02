@@ -7,6 +7,8 @@ class Termination(StrEnum):
 
     GM_STOP = "gm_stop"
     MAX_ROUNDS = "max_rounds"
+    # A single player decided without a debate.
+    SINGLE_DECISION = "single_decision"
 
 
 class Suggestion(TypedDict):

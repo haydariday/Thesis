@@ -7,6 +7,8 @@ class Slot(StrEnum):
 
     GM = "gm"
     ADVISOR = "advisor"
+    # The only agent of a single-agent line-up: it decides alone each turn.
+    PLAYER = "player"
 
 
 class ActionRule(StrEnum):
@@ -22,8 +24,8 @@ class PersonaSpec:
     """One persona as data: who it is, what it is told and what it may answer.
 
     ``instruction`` is the system prompt. ``task`` is the per-turn request an
-    advisor receives; the GM's propose and review requests belong to the
-    debate graph, so a GM persona leaves it empty.
+    advisor or a player receives; the GM's propose and review requests belong
+    to the debate graph, so a GM persona leaves it empty.
     """
 
     key: str
@@ -34,7 +36,9 @@ class PersonaSpec:
     action_rule: ActionRule = ActionRule.ANY
 
     def __post_init__(self) -> None:
-        if self.slot == Slot.ADVISOR and not self.task:
-            raise ValueError(f"Advisor persona {self.key!r} needs a task.")
+        if self.slot in (Slot.ADVISOR, Slot.PLAYER) and not self.task:
+            raise ValueError(f"{self.slot.capitalize()} persona {self.key!r} needs a task.")
+        if self.slot == Slot.PLAYER and self.action_rule != ActionRule.ANY:
+            raise ValueError(f"Player persona {self.key!r} takes no action rule.")
         if self.slot == Slot.GM and (self.task or self.action_rule != ActionRule.ANY):
             raise ValueError(f"GM persona {self.key!r} takes no task or action rule.")

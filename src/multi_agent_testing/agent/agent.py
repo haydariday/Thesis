@@ -11,7 +11,7 @@ from .backend import (
     ModelBackend,
     TruncatedReply,
 )
-from .persona_spec import PersonaSpec
+from .persona_spec import PersonaSpec, Slot
 
 
 @dataclass
@@ -60,15 +60,22 @@ class Agent:
     ) -> AgentDecision:
         """Request and validate a structured agent decision."""
 
-        schema = json.dumps(AgentDecision.model_json_schema())
+        schema_fields = AgentDecision.model_json_schema()
+        stop_rule = " Advisors must set stop to false."
+        if self.persona.slot == Slot.PLAYER:
+            # A single player is not in a debate, so its prompt names neither
+            # advisors nor the debate (the schema description says "debate").
+            schema_fields.pop("description", None)
+            stop_rule = ""
+        schema = json.dumps(schema_fields)
 
         instruction = (
             f"{self.instruction}\n\n"
             "Return exactly one JSON object matching this schema:\n"
             f"{schema}\n"
             "Do not include markdown fences or text outside the JSON. "
-            "Keep reason short: at most two sentences and about 40 words. "
-            "Advisors must set stop to false."
+            "Keep reason short: at most two sentences and about 40 words."
+            f"{stop_rule}"
         )
 
         messages: Messages = [
