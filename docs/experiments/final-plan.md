@@ -76,7 +76,7 @@ How the baselines enter each question:
 |---|---|
 | RQ1 | Reference values in the same table: within-puzzle SD and ICC for each condition. |
 | RQ2 | Main use. ρ, bias and MAE for each condition, plus the two paired contrasts (Section 7) to show whether C1 agrees with humans better than either baseline. |
-| RQ3 | C3 is the baseline of the persona check. The personas count as working only if Cautious and Bold differ in C1 and the neutral advisors do not differ in C3 (Section 7). |
+| RQ3 | C3 is the baseline of the persona check. The personas count as working only if Cautious pulls away from Bold in C1 more than the second neutral advisor pulls away from the first in C3, at the same speaking positions (Section 7). |
 
 ## 4. Puzzles
 
@@ -215,14 +215,16 @@ A new `experiment/analysis_final.py` reads the three experiment directories, reu
 |---|---|
 | RQ1 | Within-puzzle SD, ICC(1,1) and ICC(1,10), each ICC with its F-distribution 95% interval |
 | RQ2 | Spearman ρ with p-value (primary), Pearson r with p-value, bias and MAE with the constant-guess baseline, rank-based terciles (exact and adjacent, quadratic-weighted κ) |
-| RQ3 (C1, C3) | GM retention, adoption and agreement per advisor, non-candidate share per advisor after turn 1, and the two persona tests below |
+| RQ3 (C1, C3) | GM retention, adoption and agreement per advisor, non-candidate share per advisor after turn 1, herding per advisor, and the persona check below |
 
 **Baseline contrasts (inside RQ1 to RQ3).** For the debate effect (C3 − C2) and the persona effect (C1 − C3):
 
 - Paired per-puzzle differences in absolute error (for MAE), signed error (for bias) and within-puzzle SD, each tested with the two-sided Wilcoxon signed-rank test over the 100 puzzles. The mean difference is reported as the effect size. Holm correction over the two contrasts, per measure.
 - ρ for each condition against zero with its p-value. The ρ difference between conditions is reported as a value only, since a test of it would need several hundred puzzles (Section 5).
-- For the persona effect, each advisor gets a non-candidate share per game (suggestions after turn 1). In C1, `cautious_vs_bold` is a Wilcoxon signed-rank test on the per-game Cautious − Bold differences. In C3, `advisor_difference` is a Friedman test across the three neutral advisors. The personas count as working only if the C1 test is significant with Cautious above Bold and the C3 test is not. Both use games as the unit, so turns in one game are never counted as independent. Implemented at F5 in `persona_stats.py` and `nonparametric.py` (stdlib, normal and chi-square approximations with tie corrections, checked against scipy).
-- Limitation: the game-level tests treat the 1,000 games of a condition as independent, although each puzzle is played 10 times.
+- **Persona check (primary, position-matched).** Bold and `neutral_1` speak first, Cautious and `neutral_2` second, and each sees the same earlier advice. Each advisor gets a non-candidate share per game (suggestions after turn 1). For each puzzle, the mean per-game difference second minus first speaker is taken in C1 (Cautious − Bold) and in C3 (`neutral_2` − `neutral_1`). A two-sided Wilcoxon signed-rank test over the puzzles in both conditions tests C1's difference minus C3's. The personas count as working if it is significant with C1's difference larger. Position and exposure are the same in both conditions, so what remains is the persona text. Puzzles are the unit, as in the outcome contrasts.
+- **Descriptive persona tests.** `cautious_vs_bold` (Wilcoxon on per-game Cautious − Bold in C1) and `advisor_difference` (Friedman across the advisors of a condition) stay in `metrics.json`. They treat games as independent, although each puzzle is played 10 times, so they are not used for the verdict.
+- **Herding (descriptive).** For each advisor, the share of its dissents (suggestions that differ from the GM's proposal) that repeat a dissent an earlier advisor gave in the same round. The first speaker cannot copy. Reported per condition in `persona_stats.csv` (`dissents`, `dissent_copies`, `herding_share`). In the F7 smoke runs: Cautious 1 of 99, Casual 9 of 43, `neutral_2` 17 of 20 and `neutral_3` 21 of 23.
+- Implemented at F5 and F6 in `persona_stats.py`, `nonparametric.py` (stdlib Wilcoxon and Friedman, checked against scipy) and `analysis_final.py`.
 
 **Implemented at F6** as `experiment/analysis_final.py`. The constant-guess baseline is the MAE of predicting every puzzle at the human mean of the puzzles at hand (`constant_baseline_mae`). Next to it, `bias_corrected_mae` removes the condition's own bias, so a value below the baseline shows puzzle-level information beyond a constant shift. A fingerprint warning is written when the conditions ran on more than one `system_fingerprint`. Run after F9:
 
@@ -233,6 +235,19 @@ uv run python -m multi_agent_testing.experiment.analysis_final \
 ```
 
 **Sensitivity checks.** Quartiles instead of terciles, missing games scored as losses, the 7-bin distribution pooled by tercile, and the cost and reliability of each condition (tokens, seconds, calls, repairs and failures per game).
+
+### 7.1 Limitations stated in the thesis
+
+The final study uses two ablations, C2 (no debate) and C3 (no personas). Other design choices are not ablated. They are stated as limitations, with the evidence the study collects for each.
+
+| Limitation | Evidence or control |
+|---|---|
+| Advisors speak in one fixed order (Bold → Cautious → Casual), so the results hold for this order. Order effects are reported in LLM debates. | The position-matched persona check holds position fixed within this order. Optional order ablation in Section 9. |
+| Advisors see the earlier advice of the same round, which invites herding. | Herding is measured per advisor and condition. |
+| C1 − C3 removes three things at once: playstyle content, advisors that differ from each other, and persona names the GM can weigh. | The position-matched check shows whether the persona text changes behaviour. It cannot split the outcome effect. |
+| C3 − C2 also differs in compute (about 37 against 4 calls per game). | Calls, tokens and seconds per game are reported per condition. |
+| The neutral C3 prompt was revised after the first smoke test, while the persona text was not. | Recorded with its reason in Sections 2.2 and 6.4. |
+| One model, one game, zero-shot prompts, and a debate protocol designed for this study. | Scope of the thesis. |
 
 ## 8. Implementation phases
 
@@ -261,7 +276,7 @@ uv run python -m multi_agent_testing.experiment.analysis_final \
 - **After the first chunk of each condition in F9:** check the fingerprints, the failure rate and the spend before continuing.
 
 ## 9. Open questions for the supervisor
-- Advisors speak in a fixed order and see the earlier advice of the same round, as in the pilot. F7 shows strong herding in C3, so the persona contrast (C1 − C3) partly measures resistance to herding. Report as a limitation, or add an order or blind-advisor ablation?
+- Advisors speak in a fixed order and see the earlier advice of the same round, as in the pilot. F7 shows strong herding in C3. The plan reports both as limitations (Section 7.1). Optional add-on, decided before F8: an **order ablation** under RQ3 as a pre-registered robustness check. C1 with the reversed order (Casual → Cautious → Bold) on the 100 final puzzles × 3 runs (300 games, about $6 and 4–5 hours). It reports adoption, herding and non-candidate shares per persona by position (RQ3) and, descriptively, Spearman ρ and bias against the main C1 run (RQ2). It adds no research question and never pools with C1. A blind-advisor variant is not proposed, since it would change the protocol validated in the pilot.
 
 - RQ3 in the thesis (expert evaluation) against persona behavior here, and whether C2 and C3 as baselines inside RQ1 to RQ3 are enough without a separate comparison question.
 - Whether terciles replace quartiles as the category scheme of the final study.

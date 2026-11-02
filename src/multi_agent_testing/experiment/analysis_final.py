@@ -39,9 +39,16 @@ Study conventions encoded here:
   correction over the two planned contrasts (debate effect C3 - C2,
   persona effect C1 - C3). C1 - C2 is reported without a test. The
   difference in Spearman rho is a value only.
-* The persona check (plan Section 3) holds when C1's Cautious minus Bold
-  per-game non-candidate share is significantly positive (Wilcoxon) and
-  C3's neutral advisors do not differ (Friedman), both at ``ALPHA``.
+* The persona check (plan Section 7) is position-matched. Bold and
+  neutral_1 speak first, Cautious and neutral_2 second. For each puzzle the
+  mean per-game difference in non-candidate share (second minus first
+  speaker) is taken in C1 and in C3, and a Wilcoxon signed-rank test over
+  the puzzles in both asks whether C1's difference is larger. The personas
+  count as working when it is significantly positive at ``ALPHA``. The C1
+  Wilcoxon (Cautious vs Bold) and the C3 Friedman test stay as descriptive
+  results.
+* Herding is descriptive: per advisor, the share of its dissents that
+  repeat an earlier advisor's dissent in the same round.
 """
 
 from __future__ import annotations
@@ -51,7 +58,7 @@ import csv
 import json
 import math
 import statistics
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -77,7 +84,7 @@ from .analysis_pilot02 import (
 )
 from .distribution import score_distribution, wasserstein_1
 from .nonparametric import wilcoxon_signed_rank
-from .persona_stats import load_games, persona_statistics
+from .persona_stats import Game, load_games, persona_statistics, puzzle_position_differences
 from .terciles import TERCILE_LABELS, rank_split
 
 CONDITIONS: tuple[tuple[str, str], ...] = (
@@ -92,6 +99,9 @@ CONTRASTS: tuple[tuple[str, str, str, bool], ...] = (
     ("overall", "c1", "c2", False),
 )
 CONTRAST_MEASURES = ("abs_error", "signed_error", "within_sd")
+# Speaking positions compared by the persona check: (first, second) per condition.
+POSITION_PAIRS = {"c1": ("bold", "cautious"), "c3": ("neutral_1", "neutral_2")}
+FINAL_PERSONA_COLUMNS = (*PERSONA_COLUMNS, "position", "dissents", "dissent_copies", "herding_share")
 ALPHA = 0.05
 # Persona statistics have no bootstrap here; these only fill the pilot's
 # manipulation_check, which the final study does not report.
@@ -485,21 +495,46 @@ def spearman_differences(blocks: dict[str, dict[str, Any]]) -> dict[str, float |
 # ---------------------------------------------------------------------------
 
 
-def persona_check(stats: dict[str, dict[str, Any]], alpha: float = ALPHA) -> dict[str, Any]:
+def position_matched_check(games: Mapping[str, Sequence[Game]], alpha: float = ALPHA) -> dict[str, Any]:
+    """Wilcoxon over puzzles of (C1 second - first) minus (C3 second - first)."""
+
+    c1 = puzzle_position_differences(games["c1"], *POSITION_PAIRS["c1"])
+    c3 = puzzle_position_differences(games["c3"], *POSITION_PAIRS["c3"])
+    shared = sorted(set(c1) & set(c3), key=int)
+    result = wilcoxon_signed_rank([c1[pid] - c3[pid] for pid in shared])
+    holds = (
+        None if result["p_value"] is None
+        else bool(result["p_value"] < alpha and (result["mean_difference"] or 0) > 0)
+    )
+    return {
+        "difference": "(cautious - bold in c1) - (neutral_2 - neutral_1 in c3), per puzzle",
+        "unit": "puzzle",
+        "c1_mean_gap": sum(c1[pid] for pid in shared) / len(shared) if shared else None,
+        "c3_mean_gap": sum(c3[pid] for pid in shared) / len(shared) if shared else None,
+        **result,
+        "holds": holds,
+    }
+
+
+def persona_check(
+    stats: dict[str, dict[str, Any]],
+    games: Mapping[str, Sequence[Game]],
+    alpha: float = ALPHA,
+) -> dict[str, Any]:
+    """Primary: the position-matched test. The other two are descriptive."""
+
+    primary = position_matched_check(games, alpha)
     c1 = stats["c1"].get("cautious_vs_bold")
     c3 = stats["c3"].get("advisor_difference")
-    c1_holds = (
-        None if c1 is None or c1["p_value"] is None
-        else bool(c1["p_value"] < alpha and (c1["mean_difference"] or 0) > 0)
-    )
-    c3_differ = None if c3 is None or c3["p_value"] is None else bool(c3["p_value"] < alpha)
     return {
         "alpha": alpha,
-        "c1_cautious_above_bold": c1_holds,
-        "c3_neutral_advisors_differ": c3_differ,
-        "personas_work": (
-            None if c1_holds is None or c3_differ is None else c1_holds and not c3_differ
-        ),
+        "position_matched": primary,
+        "personas_work": primary["holds"],
+        "descriptive": {
+            "c1_cautious_vs_bold_p": c1["p_value"] if c1 else None,
+            "c1_cautious_vs_bold_mean_difference": c1["mean_difference"] if c1 else None,
+            "c3_friedman_p": c3["p_value"] if c3 else None,
+        },
     }
 
 
@@ -533,6 +568,7 @@ class AnalysisResult:
 def analyse(conditions: dict[str, Condition], quartile_cuts: Sequence[float]) -> AnalysisResult:
     blocks: dict[str, dict[str, Any]] = {}
     persona: dict[str, dict[str, Any]] = {}
+    games: dict[str, list[Game]] = {}
     tables: dict[str, list[dict[str, Any]]] = {
         "condition_summary": [], "persona_stats": [], "puzzle_summary": [], "runs": [],
     }
@@ -540,8 +576,8 @@ def analyse(conditions: dict[str, Condition], quartile_cuts: Sequence[float]) ->
     for name, c in conditions.items():
         puzzles = c.experiment.puzzles
         runs = run_rows(c.experiment)
-        stats = persona_statistics(load_games(c.experiment.directory / "runs"),
-                                   PERSONA_SEED, PERSONA_RESAMPLES)
+        games[name] = load_games(c.experiment.directory / "runs")
+        stats = persona_statistics(games[name], PERSONA_SEED, PERSONA_RESAMPLES)
         stats.pop("manipulation_check", None)
         persona[name] = stats
         blocks[name] = {
@@ -564,7 +600,7 @@ def analyse(conditions: dict[str, Condition], quartile_cuts: Sequence[float]) ->
             },
         }
         tables["condition_summary"].append(summary_row(name, blocks[name]))
-        tables["persona_stats"].extend(persona_rows(name, stats))
+        tables["persona_stats"].extend(final_persona_rows(name, stats))
         tables["puzzle_summary"].extend(puzzle_rows(c))
         tables["runs"].extend(runs)
 
@@ -579,7 +615,7 @@ def analyse(conditions: dict[str, Condition], quartile_cuts: Sequence[float]) ->
         "conditions": blocks,
         "contrasts": contrasts,
         "spearman_differences": spearman_differences(blocks),
-        "persona_check": persona_check(persona),
+        "persona_check": persona_check(persona, games),
         "fingerprints": fingerprints,
         "fingerprint_warning": (
             None if len({fp for prints in fingerprints.values() for fp in prints}) <= 1
@@ -587,6 +623,17 @@ def analyse(conditions: dict[str, Condition], quartile_cuts: Sequence[float]) ->
         ),
     }
     return AnalysisResult(metrics, tables)
+
+
+def final_persona_rows(name: str, stats: dict[str, Any]) -> list[dict[str, Any]]:
+    """The pilot's persona rows plus position and herding per advisor."""
+
+    rows = persona_rows(name, stats)
+    for row in rows:
+        item = stats["advisors"].get(row["agent"])
+        if item is not None:
+            row.update({key: item[key] for key in ("position", "dissents", "dissent_copies", "herding_share")})
+    return rows
 
 
 def summary_row(name: str, block: dict[str, Any]) -> dict[str, Any]:
@@ -637,7 +684,7 @@ def puzzle_rows(condition: Condition) -> list[dict[str, Any]]:
 TABLE_COLUMNS = {
     "condition_summary": CONDITION_COLUMNS,
     "contrasts": CONTRAST_COLUMNS,
-    "persona_stats": PERSONA_COLUMNS,
+    "persona_stats": FINAL_PERSONA_COLUMNS,
     "puzzle_summary": PUZZLE_COLUMNS,
     "runs": RUN_COLUMNS,
 }

@@ -14,6 +14,18 @@ advisors.  In a debate without personas (C3) the Friedman test is the
 baseline of the persona check: advisors with one shared instruction should
 not differ.
 
+Herding: advisors speak in a fixed order and see the earlier advice of the
+round.  ``herding_counts`` counts, per advisor, the suggestions that differ
+from the GM's proposal (dissents) and how many of them repeat a dissent an
+earlier advisor gave in the same round.  The first speaker cannot copy, so
+its share is reported as None.
+
+Position-matched persona check: ``puzzle_position_differences`` gives, per
+puzzle, the mean per-game difference in non-candidate share between the
+advisor speaking second and the one speaking first.  The final analysis
+compares this difference between C1 (Cautious minus Bold) and C3 (neutral_2
+minus neutral_1), so position and exposure are held fixed.
+
 A single-agent game (C2) has no advisors.  Its GM fields are then trivially
 true (the player always "retains" its own word), so retention is reported as
 None rather than 1.
@@ -173,6 +185,44 @@ def advisor_difference(games: Sequence[Game], advisors: Sequence[str]) -> dict[s
     return {"unit": "game", "mean_shares": shares, **friedman(rows, advisors)}
 
 
+def herding_counts(games: Sequence[Game]) -> dict[str, dict[str, int]]:
+    """Per advisor: dissents, and dissents repeating an earlier same-round dissent."""
+
+    out: dict[str, dict[str, int]] = {}
+    for game in games:
+        order = {key: position for position, key in enumerate(game.advisors)}
+        for turn in game.turns:
+            rounds: dict[int, list[dict[str, Any]]] = {}
+            for item in turn.get("advisor_suggestions") or []:
+                if item.get("action") is not None and not item.get("abstained"):
+                    rounds.setdefault(int(item.get("round") or 1), []).append(item)
+            for items in rounds.values():
+                items.sort(key=lambda item: order.get(item["advisor"], len(order)))
+                earlier: set[str] = set()
+                for item in items:
+                    counts = out.setdefault(item["advisor"], {"dissents": 0, "dissent_copies": 0})
+                    if item["action"] != item["gm_proposal"]:
+                        counts["dissents"] += 1
+                        counts["dissent_copies"] += item["action"] in earlier
+                        earlier.add(item["action"])
+    return out
+
+
+def puzzle_position_differences(
+    games: Sequence[Game],
+    first: str,
+    second: str,
+) -> dict[str, float]:
+    """Per puzzle: mean over games of ``second`` minus ``first`` non-candidate share."""
+
+    by_puzzle: dict[str, list[float]] = {}
+    for game in games:
+        a, b = game_share(game, first), game_share(game, second)
+        if a is not None and b is not None:
+            by_puzzle.setdefault(game.puzzle_id, []).append(b - a)
+    return {pid: sum(values) / len(values) for pid, values in by_puzzle.items()}
+
+
 def persona_statistics(
     games: Sequence[Game],
     seed: int,
@@ -183,8 +233,11 @@ def persona_statistics(
     advisors = list(dict.fromkeys(key for game in games for key in game.advisors))
     terminations = Counter(str(turn.get("termination")) for turn in turns)
 
+    herding = herding_counts(games)
     per_advisor = {}
-    for key in advisors:
+    for position, key in enumerate(advisors, start=1):
+        dissents = herding.get(key, {}).get("dissents", 0)
+        copies = herding.get(key, {}).get("dissent_copies", 0)
         adopted = sum(key in (turn.get("adopted_from") or []) for turn in turns)
         agreed = sum(bool((turn.get("advisor_agreed") or {}).get(key)) for turn in turns)
         bad, total = non_candidate_counts(games, key)
@@ -204,6 +257,10 @@ def persona_statistics(
             "suggestions_after_turn_1": total,
             "non_candidate": bad,
             "non_candidate_share": _share(bad, total),
+            "position": position,
+            "dissents": dissents,
+            "dissent_copies": copies,
+            "herding_share": None if position == 1 else _share(copies, dissents),
         }
 
     solo = not advisors

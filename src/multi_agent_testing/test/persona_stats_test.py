@@ -6,6 +6,7 @@ from pathlib import Path
 from ..experiment.persona_stats import (
     Game,
     advisor_difference,
+    herding_counts,
     load_games,
     opener_rows,
     persona_statistics,
@@ -165,6 +166,44 @@ class AdvisorDifferenceTest(unittest.TestCase):
         self.assertIsNone(stats["manipulation_check"])
         self.assertIsNone(stats["cautious_vs_bold"])
         self.assertEqual(stats["advisor_difference"]["treatments"], list(self.KEYS))
+
+
+class HerdingTest(unittest.TestCase):
+    KEYS = ("neutral_1", "neutral_2", "neutral_3")
+
+    def item(self, key, action, rnd=1, gm="SLATE", abstained=False):
+        return {"round": rnd, "advisor": key, "action": None if abstained else action,
+                "gm_proposal": gm, "abstained": abstained}
+
+    def test_counts_copies_of_earlier_dissents(self):
+        turn = {"advisor_suggestions": [
+            # Round 1: neutral_1 dissents (CRANE), neutral_2 copies it, neutral_3 agrees.
+            self.item("neutral_1", "CRANE"), self.item("neutral_2", "CRANE"), self.item("neutral_3", "SLATE"),
+            # Round 2: neutral_1 agrees, neutral_2 dissents alone, neutral_3 copies neutral_2.
+            self.item("neutral_1", "SLATE", 2), self.item("neutral_2", "AUDIO", 2), self.item("neutral_3", "AUDIO", 2),
+        ]}
+        counts = herding_counts([Game("1", 1, self.KEYS, (turn,))])
+        self.assertEqual(counts["neutral_1"], {"dissents": 1, "dissent_copies": 0})
+        self.assertEqual(counts["neutral_2"], {"dissents": 2, "dissent_copies": 1})
+        self.assertEqual(counts["neutral_3"], {"dissents": 1, "dissent_copies": 1})
+
+    def test_agreement_and_abstention_are_not_dissents(self):
+        turn = {"advisor_suggestions": [
+            self.item("neutral_1", "SLATE"), self.item("neutral_2", None, abstained=True),
+            self.item("neutral_3", "SLATE"),
+        ]}
+        counts = herding_counts([Game("1", 1, self.KEYS, (turn,))])
+        self.assertEqual(counts["neutral_3"], {"dissents": 0, "dissent_copies": 0})
+        self.assertNotIn("neutral_2", counts)
+
+    def test_shares_in_persona_statistics(self):
+        turn = neutral_turn({k: True for k in self.KEYS})  # all suggest CRANE against SLATE
+        stats = persona_statistics([Game("1", 1, self.KEYS, (turn,))], seed=1, resamples=5)
+        advisors = stats["advisors"]
+        self.assertEqual([advisors[k]["position"] for k in self.KEYS], [1, 2, 3])
+        self.assertIsNone(advisors["neutral_1"]["herding_share"])
+        self.assertEqual(advisors["neutral_2"]["herding_share"], 1.0)
+        self.assertEqual(advisors["neutral_3"]["dissent_copies"], 1)
 
 
 class SoloStatisticsTest(unittest.TestCase):

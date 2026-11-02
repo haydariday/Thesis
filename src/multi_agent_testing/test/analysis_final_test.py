@@ -13,6 +13,7 @@ from ..agent.backend import ScriptedBackend
 from ..experiment import analysis_final as af
 from ..experiment import runner
 from ..experiment.analysis_pilot02 import Experiment, PuzzleRuns
+from ..experiment.persona_stats import Game
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 DATASET = REPO_ROOT / "src" / "data" / "raw" / "worldepuzzles.json"
@@ -155,19 +156,54 @@ class ContrastTest(unittest.TestCase):
         self.assertEqual(overall["pairs"], 1)
 
 
+def position_game(pid: str, rep: int, keys: tuple[str, str], first_bad: bool, second_bad: bool) -> Game:
+    """Two turns; after turn 1 the first and second speaker are candidates or not."""
+
+    def item(key: str, bad: bool) -> dict:
+        return {"round": 1, "advisor": key, "action": "CRANE", "gm_proposal": "SLATE",
+                "abstained": False, "is_candidate": not bad}
+
+    opening = {"advisor_suggestions": [item(keys[0], False), item(keys[1], False)]}
+    later = {"advisor_suggestions": [item(keys[0], first_bad), item(keys[1], second_bad)]}
+    return Game(pid, rep, keys, (opening, later))
+
+
 class PersonaCheckTest(unittest.TestCase):
-    def stats(self, c1_p, c1_diff, c3_p):
+    C1 = ("bold", "cautious")
+    C3 = ("neutral_1", "neutral_2")
+
+    def games(self, c1_second_bad: bool, puzzles: int = 8) -> dict:
         return {
-            "c1": {"cautious_vs_bold": {"p_value": c1_p, "mean_difference": c1_diff}},
-            "c3": {"advisor_difference": {"p_value": c3_p}},
+            "c1": [position_game(str(i), 1, self.C1, False, c1_second_bad) for i in range(puzzles)],
+            # In C3 the second speaker is a non-candidate in every other puzzle.
+            "c3": [position_game(str(i), 1, self.C3, False, i % 2 == 0) for i in range(puzzles)],
         }
 
-    def test_outcomes(self):
-        self.assertTrue(af.persona_check(self.stats(0.001, 0.2, 0.4))["personas_work"])
-        self.assertFalse(af.persona_check(self.stats(0.001, 0.2, 0.01))["personas_work"])
-        self.assertFalse(af.persona_check(self.stats(0.001, -0.2, 0.4))["personas_work"])
-        self.assertFalse(af.persona_check(self.stats(0.2, 0.2, 0.4))["personas_work"])
-        self.assertIsNone(af.persona_check(self.stats(None, None, 0.4))["personas_work"])
+    def test_position_matched_gap(self):
+        result = af.position_matched_check(self.games(c1_second_bad=True))
+        self.assertEqual(result["n"], 4)  # where C3's gap is also 1 the difference is 0 and dropped
+        self.assertAlmostEqual(result["c1_mean_gap"], 1.0)
+        self.assertAlmostEqual(result["c3_mean_gap"], 0.5)
+        self.assertAlmostEqual(result["mean_difference"], 0.5)
+        self.assertEqual(result["unit"], "puzzle")
+
+    def test_holds_only_when_c1_gap_is_larger(self):
+        stats = {"c1": {"cautious_vs_bold": None}, "c3": {"advisor_difference": None}}
+        many = self.games(c1_second_bad=True, puzzles=40)
+        self.assertTrue(af.persona_check(stats, many)["personas_work"])
+        # C3's second speaker is now always worse, C1's only in every other puzzle.
+        reversed_gap = {
+            "c1": [position_game(str(i), 1, self.C1, False, i % 2 == 0) for i in range(40)],
+            "c3": [position_game(str(i), 1, self.C3, False, True) for i in range(40)],
+        }
+        self.assertFalse(af.persona_check(stats, reversed_gap)["personas_work"])
+
+    def test_no_shared_puzzles(self):
+        games = {"c1": [], "c3": []}
+        stats = {"c1": {}, "c3": {}}
+        check = af.persona_check(stats, games)
+        self.assertIsNone(check["personas_work"])
+        self.assertIsNone(check["descriptive"]["c1_cautious_vs_bold_p"])
 
 
 class ConfigCheckTest(unittest.TestCase):
@@ -264,6 +300,8 @@ class EndToEndTest(unittest.TestCase):
             self.assertEqual(len(contrasts), 1 + 3 * 3)
             personas = (output / "persona_stats.csv").read_text(encoding="utf-8").splitlines()
             self.assertEqual(len(personas), 1 + 4 + 1 + 4)  # GM + 3 advisors, GM only, GM + 3
+            self.assertTrue(personas[0].endswith("position,dissents,dissent_copies,herding_share"))
+            self.assertIn("position_matched", metrics["persona_check"])
             runs = (output / "runs.csv").read_text(encoding="utf-8").splitlines()
             self.assertEqual(len(runs), 1 + 9)
 
