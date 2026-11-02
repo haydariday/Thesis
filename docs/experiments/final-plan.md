@@ -42,7 +42,7 @@ The final study uses the **parallel** protocol (decided on 2 November 2026, the 
 - **`parallel`** (final study, default): each advisor reads the GM's proposal and the transcript up to the start of the round, but not the other advisors' advice of that round. The advisors of a round therefore answer independently, as if in parallel, while the GM review still sees every suggestion. Later rounds see the earlier rounds in full. This follows debates in which agents see each other's answers only from the previous round [Du et al.]. The order and conformity papers that motivate it came from search summaries and must be verified before citing (`suggestion.md`).
 - **`sequential`** (the pilot protocol): each advisor also reads the suggestions of the earlier advisors in the same round. It stays selectable with `--debate-protocol sequential`, so the pilot can be reproduced. Configs written before the flag existed resume as `sequential`.
 
-Why the change: the F7 smoke runs under `sequential` showed that later advisors mostly repeat the first dissent (herding, Section 6.4), and that the fixed order ties each persona to one position. Under `parallel` neither can happen within a round. The cost is that the final system differs from the one the pilot validated: the persona text, GM and game knowledge are unchanged, but the advisors no longer hear each other within a round. C2 has no advisors, so the protocol does not affect it. The advisors are still called in the fixed order, which no longer matters within a round.
+Why the change: in the F7 smoke runs under `sequential`, later advisors often named the same alternative as an earlier one (85% for C3's neutral advisors), and the fixed order tied each persona to one position. The C1 parallel smoke run shows that much of this same-word share is independent agreement rather than copying (Casual 16 of 52 under `parallel` against 9 of 43 under `sequential`). The parallel protocol rules out copying and order effects within a round by construction, whatever their size. The cost is that the final system differs from the one the pilot validated: the persona text, GM and game knowledge are unchanged, but the advisors no longer hear each other within a round. C2 has no advisors, so the protocol does not affect it. The advisors are still called in the fixed order, which no longer matters within a round.
 
 ### 2.1 C2 single agent
 
@@ -126,7 +126,7 @@ The references in this section were cited from memory and must be checked before
 | Item | Value |
 |---|---|
 | Backend | DeepSeek API, chat protocol, `deepseek-flash`. Record the returned `model` and `system_fingerprint` of every call. |
-| Sampling | thinking `enabled`, `--reasoning-effort low`, `--max-tokens 4096`, JSON mode, no temperature |
+| Sampling | thinking `enabled`, `--reasoning-effort low`, `--max-tokens 8192`, JSON mode, no temperature. Raised from 4096 at F8 (Section 6.4). |
 | Game | `--max-guesses 6`, hidden from the agents |
 | Debate (C1, C3) | `--max-rounds 3`, `--max-repairs 2`, `--debate-protocol parallel` |
 | C2 | one decision per turn, `--max-repairs 2` |
@@ -161,7 +161,7 @@ uv run python -m multi_agent_testing.experiment.runner start \
   --guess-list src/data/raw/allowed_guesses.txt \
   --backend deepseek --protocol chat --model deepseek-flash \
   --base-url 'https://api.deepseek.com' \
-  --thinking enabled --reasoning-effort low --max-tokens 4096 --json-mode \
+  --thinking enabled --reasoning-effort low --max-tokens 8192 --json-mode \
   --max-guesses 6 --max-rounds 3 --max-repairs 2 --debate-protocol parallel \
   --request-timeout 300 --api-retries 1 \
   --repetitions 10 --max-attempts 2 --workers 4 \
@@ -218,9 +218,11 @@ Smoke manifest × 2 games per condition, settings of Section 6.1 with `--workers
 | Turns ending at the round cap | 4 of 62 | 15 of 60 |
 | Calls / cost per game | 32.9 / $0.0209 | 37.5 / $0.0218 |
 
-The revision cut truncations to about a third and removed the abstentions, so `max_tokens` stays at 4096 for all conditions. Herding is unchanged. The GM now runs more rounds, so the cost per game stays about the same. The revised prompt is the C3 configuration for F8.
+The revision cut truncations to about a third and removed the abstentions, so `max_tokens` stayed at 4096 at that point (raised to 8192 at F8, below). Herding is unchanged. The GM now runs more rounds, so the cost per game stays about the same. The revised prompt is the C3 configuration for F8.
 
-Open before F8 (Section 9): whether to add a herding statistic.
+**C1 under the parallel protocol** (`runs/final-smoke-p-c1`, revision `936681f`, max_tokens 4096): 16 of 16 completed and won, mean score 3.62, 37.6 calls and $0.0197 per game, 210 s per game, one fingerprint (`bc19ba97…`), no abstentions or backend errors. Truncated replies 11 of 601 (1.8%; Cautious 8), against 0.8% under `sequential`. Agreement with the GM 82 / 26 / 61% (Bold / Cautious / Casual). Casual names the same alternative as Bold in 16 of 52 dissents although it cannot see Bold's advice.
+
+**Decisions at F8 (2 November 2026).** C2 and C3 are not smoke-tested under `parallel`: C2 has no advisors, and C3 was skipped by decision, so C3's truncation rate under `parallel` is first seen in F9. `max_tokens` is raised to 8192 for all conditions without a further smoke test. Finished replies reach 3,500 tokens at the 99th percentile, so 4096 cuts off the longest ones, and a cut-off reply costs the full budget plus a repair. Whether the API accepts 8192 with thinking enabled is first seen in the opening minutes of F9.
 
 ## 7. Analysis
 
