@@ -39,7 +39,7 @@ C1 against C2 is reported as the overall difference but is not a separate test.
 
 The final study uses the **parallel** protocol (decided on 2 November 2026, the default of the runner flag `--debate-protocol`, recorded in each config):
 
-- **`parallel`** (final study, default): each advisor reads the GM's proposal and the transcript up to the start of the round, but not the other advisors' advice of that round. The advisors of a round therefore answer independently, as if in parallel, while the GM review still sees every suggestion. Later rounds see the earlier rounds in full. This follows debates in which agents see each other's answers only from the previous round [Du et al.].
+- **`parallel`** (final study, default): each advisor reads the GM's proposal and the transcript up to the start of the round, but not the other advisors' advice of that round. The advisors of a round therefore answer independently, as if in parallel, while the GM review still sees every suggestion. Later rounds see the earlier rounds in full. This follows debates in which agents see each other's answers only from the previous round [Du et al.]. The order and conformity papers that motivate it came from search summaries and must be verified before citing (`suggestion.md`).
 - **`sequential`** (the pilot protocol): each advisor also reads the suggestions of the earlier advisors in the same round. It stays selectable with `--debate-protocol sequential`, so the pilot can be reproduced. Configs written before the flag existed resume as `sequential`.
 
 Why the change: the F7 smoke runs under `sequential` showed that later advisors mostly repeat the first dissent (herding, Section 6.4), and that the fixed order ties each persona to one position. Under `parallel` neither can happen within a round. The cost is that the final system differs from the one the pilot validated: the persona text, GM and game knowledge are unchanged, but the advisors no longer hear each other within a round. C2 has no advisors, so the protocol does not affect it. The advisors are still called in the fixed order, which no longer matters within a round.
@@ -117,7 +117,7 @@ Power of Spearman ρ against zero (α = 0.05, 2,000 simulated studies per cell, 
 
 - **Tercile stratification (rerun on 2 November 2026, mode `terciles`).** Drawing 33/33/34 per tercile instead of 25 per quartile leaves the power, ρ, ICC(1,1) and MAE unchanged at 100 × 10 (for example power 91–95% at a true ρ of 0.4, and ICC(1,1) 0.21 or 0.36 depending on the between-puzzle spread). Only the exact category rate rises, because there are three categories instead of four.
 
-The references in this section were cited from memory and must be checked before they enter the thesis: Walter, Eliasziw and Donner (*Statistics in Medicine*, 1998), Bonett and Wright (*Psychometrika*, 2000) for correlation sample sizes, Koo and Li (*Journal of Chiropractic Medicine*, 2016).
+The references in this section were cited from memory and must be checked before they enter the thesis. The list, with the order and conformity papers behind Section 2.0, is in `suggestion.md`.
 
 ## 6. Configuration and run
 
