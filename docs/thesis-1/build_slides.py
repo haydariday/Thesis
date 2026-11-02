@@ -1000,8 +1000,8 @@ def build_deck() -> Path:
         border=CRIMSON_BORDER,
         items=[
             "**The Handicap Problem [1]:** LLM agents lose many games within 6 guesses, which would tie hard puzzles at 7. Playing up to **12 hidden guesses** keeps hard puzzles apart.",
-            "**12-Guess Score:** Actual guesses used (loss = **13**). Used for rankings and categories.",
-            "**6-Guess Score:** Cuts the same game at 6 guesses (loss = **7**), matching human Wordle rules since agents never see the limit. Used for **Bias**, **MAE** and **loss share**.",
+            "**12-Guess Score:** Actual guesses used (loss = **13**). Used for the text and difficulty categories.",
+            "**6-Guess Score:** Cuts the same game at 6 guesses (loss = **7**), matching human Wordle rules since agents never see the limit. Used for **Bias** and **MAE**.",
         ],
         font_size=11.0,
         space_after=4.0,
@@ -1013,10 +1013,10 @@ def build_deck() -> Path:
         badge="METRICS",
         items=[
             "**RQ1 (Consistency):** Within-puzzle **SD** (spread across runs), single-game **ICC(1,1)** and k-run mean **ICC(1,k)** (reliability of the averaged difficulty score).",
-            "**RQ2 (Average Alignment):** **Pearson r** (linear) and **Spearman ρ** (rank order) with p-values [1]; **Bias** and **MAE** compared against a **constant human-mean baseline**.",
-            "**RQ2 (Categories):** Playtester means split by **rank** into four equal quartiles (D1–D4) and compared with human quartiles in a **confusion matrix**.",
+            "**RQ2 (Average Alignment):** **Pearson r** (linear) and **Spearman ρ** (rank order) with p-values (`<0.2` very weak, `0.2–0.4` weak, `0.4–0.6` moderate, `>0.6` strong) [1]; **Bias** and **MAE** from human average.",
+            "**RQ2 (Categories):** Playtester means split by **rank** into four equal groups (D1–D4) and compared with human quartiles in a **confusion matrix**.",
         ],
-        font_size=11.0,
+        font_size=10.8,
         space_after=4.0,
     )
 
@@ -1207,10 +1207,10 @@ def build_deck() -> Path:
         title="Level Bias vs. Quartile Agreement",
         badge=None,
         items=[
-            "**Level Bias:** Averages **5.54 vs. 4.26** guesses in Exp B (**+1.28 bias**, **1.38 MAE**); fails within 6 guesses **~27 pp** more often than humans in Exp A.",
-            "**Quartile Confusion (Fig 5, Exp B):** **16/48 exact diagonal**, **31/48 within one quartile**, **0 human D4 placed in D1** (Exp A: **4/12** exact, **10/12** within one quartile).",
+            "**Level Bias & Losses (6-g):** Averaged more guesses than humans on **42/48 Exp B** and **11/12 Exp A** puzzles; lost **30.5% of Exp A games** within 6 guesses vs. **3.8%** for humans.",
+            "**Quartile Confusion (Fig 5, Exp B):** **16/48 exact diagonal**, **31/48 same or neighboring quartile**; **5 human D2 placed in D4**, **0 human D4 placed in D1**.",
         ],
-        font_size=10.5,
+        font_size=10.4,
         space_after=3.5,
         pad_y=0.14,
     )
@@ -1252,47 +1252,60 @@ def build_deck() -> Path:
         title="5.2 RQ2 Analysis: Agreement with Human Difficulty",
         badge="5.2 RQ2",
         items=[
-            "**Statistically Significant Ranking:** Both experiments rank puzzles in the same direction as humans ($p < 0.05$).",
-            "**Effect of Run Count on Precision:** Ranking is much stronger in Exp A (**ρ = 0.72**) than Exp B (**ρ = 0.34**) because 32 runs yield a cleaner puzzle mean, matching Xiao and Yang's best 20-run correlation (**r = 0.62**) [1].",
-            "**Why Raw Scores Cannot Be Read Directly:** The playtester plays **~1.3 guesses worse** than humans. Its **1.38 MAE** is more than twice the **0.55-guess width** of the middle two quartiles (3.98 to 4.53), while an MAE close to the bias (+1.28) shows most error is a **constant shift**.",
-            "**Rank-Based Quartiles Work:** Splitting by rank places **two thirds (31/48)** of Exp B puzzles within one quartile of their human category.",
+            "**Significant Rank Alignment:** Positive rank correlation ($p < 0.05$) is stronger in Exp A (**ρ = 0.72, r = 0.70**) than Exp B (**ρ = 0.34**) due to 32-run precision, comparable to Xiao and Yang's best 20-run **r = 0.62** [1].",
+            "**Losses & 12-Guess Handicap:** Plays **~1.3 guesses worse** than humans, losing **30.5% vs. 3.8%** within 6 guesses in Exp A; the 12-guess handicap prevents hard puzzles from tying at 7.",
+            "**Constant Shift vs. Narrow Quartiles:** The **1.38 MAE** is over twice the **0.55-guess width** of D2–D3 (3.98–4.53), while an MAE close to the bias (+1.28) shows most error is a **constant shift**.",
+            "**Categories vs. Random Guessing:** Rank quartiles matched **16/48 exact** (vs. **~12** by 1/4 chance) and **31/48 within one quartile** (vs. **30** by 5/8 chance)—only slightly better than chance.",
         ],
-        font_size=11.6,
-        space_after=5.5,
+        font_size=10.8,
+        space_after=4.5,
     )
 
     add_rounded_callout(
         s16, 0.60, 6.26, 12.133, 0.62,
-        "**Core Finding (Sections 5.1–5.2):** Averaging over repeated runs produces a reliable score that measures **relative difficulty (ranks and categories)** much better than **absolute difficulty**.",
+        "**Core Finding (Sections 5.1–5.2):** Multi-run averaging yields a reliable score that measures **relative difficulty** better than **absolute difficulty**, so the final study will judge agreement **mainly through ranks**.",
     )
 
     # =========================================================================
-    # SLIDE 17: 5.3 - 5.4 RQ3 PLANNED & IMPLICATIONS FOR THE FINAL STUDY
+    # SLIDE 17: 5.3 - 5.5 RQ3 PLANNED, FINAL STUDY IMPLICATIONS & THREATS TO VALIDITY
     # =========================================================================
     t_time, t_script = scripts[17]
     s17 = new_content_slide(
-        prs, 17, total_slides, "SECTION 5.3 – 5.4  •  NEXT STEPS",
-        "5.3 – 5.4 Planned Expert Evaluation (RQ3) and Final Study Implications",
-        "Mixed-method expert evaluation design and the four design decisions fixed before running the final study.",
+        prs, 17, total_slides, "SECTION 5.3 – 5.5  •  NEXT STEPS & VALIDITY",
+        "5.3 – 5.5 Expert Evaluation (RQ3), Final Study Implications and Threats to Validity",
+        "Mixed-method expert evaluation design, four design decisions fixed for the final study and human-data validity threats.",
         t_time, t_script,
     )
 
     add_rounded_card(
-        s17, 0.60, 1.68, 5.60, 5.18,
+        s17, 0.60, 1.68, 5.65, 2.45,
         title="5.3 RQ3: Expert Evaluation (Planned Next Stage)",
-        badge="5.3 RQ3",
+        badge=None,
         items=[
-            "**Schedule Position:** Follows the quantitative analysis in the research schedule.",
-            "**Stimulus Material:** The 5–7 industry experts will inspect the final RQ1 consistency and RQ2 human-agreement results.",
-            "**Part 1 — Likert-Scale Survey (1 to 5):** Experts rate utility and efficacy statements on a 1–5 scale, after which the overall average score is reported.",
-            "**Part 2 — Semi-Structured Interviews:** Analyzed thematically to capture practical workflow insights, with each recurring theme reported as a share of the expert pool.",
+            "**Schedule & Stimulus:** Follows quantitative analysis; 5–7 industry experts inspect the final RQ1 and RQ2 results.",
+            "**Part 1 — Likert Survey (1 to 5):** Rate utility statements from 1 to 5; overall average score is reported.",
+            "**Part 2 — Semi-Structured Interviews:** Analyzed thematically, with each recurring theme reported as a share of the expert pool.",
         ],
-        font_size=11.8,
-        space_after=7.0,
+        font_size=10.8,
+        space_after=4.0,
+        pad_y=0.14,
     )
 
     add_rounded_card(
-        s17, 6.55, 1.68, 6.18, 5.18,
+        s17, 0.60, 4.29, 5.65, 2.57,
+        title="5.5 Threats to Validity (Human Data)",
+        badge=None,
+        items=[
+            "**1. Whole-Percent Rounding:** Source rounds shares to whole percents, shifting a puzzle's human mean by up to **~0.2 guesses**; up to **41 of 48 Exp B puzzles** could fall in a neighboring quartile since D2 and D3 are each **< 0.3 guesses wide**.",
+            "**2. Archive-Specific Cut-Points:** Cut-points describe the Wordle archive only; **rank correlation** does not depend on them, supporting its use as the **primary RQ2 measure**.",
+        ],
+        font_size=10.8,
+        space_after=4.0,
+        pad_y=0.14,
+    )
+
+    add_rounded_card(
+        s17, 6.50, 1.68, 6.23, 5.18,
         title="5.4 Four Implications Fixed Before the Final Study",
         badge="5.4 FINAL STUDY",
         fill=CRIMSON_SOFT,
@@ -1300,13 +1313,13 @@ def build_deck() -> Path:
         items=[
             "**1. Reliability-Based Run Sizing:** Set the number of runs per puzzle ($k$) so the puzzle mean reaches a target reliability, such as **ICC(1,k) ≥ 0.9**.",
             "**2. Fixed H1 Consistency Margin:** Fix the RQ1 hypothesis margin from the pilot spread before the final run (for example, within-puzzle **SD ≤ 0.5** on the 6-guess score).",
-            "**3. Primary RQ2 Measures (H2):** Judge agreement with human difficulty primarily through **rank correlation** and **rank-based quartiles**.",
+            "**3. Primary Rank Measure & 3 Categories:** Use **rank correlation as primary** and rank-based categories as **secondary** (since 4 quartiles matched only slightly better than chance). Switch from **4 to 3 categories**, reducing rounding uncertainty from **77% to 63%** of all puzzles.",
             "**4. Descriptive Distribution Case Study:** Show the guess distributions of the **3 easiest and 3 hardest puzzles** by human mean.",
             "**Fresh Test Set:** The final study will play **fresh puzzles** that were never used in the pilot.",
         ],
-        font_size=11.6,
+        font_size=11.0,
         bullet=False,
-        space_after=6.0,
+        space_after=5.5,
     )
 
     prs.save(str(OUT_PPTX))

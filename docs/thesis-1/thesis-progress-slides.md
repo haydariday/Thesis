@@ -213,7 +213,7 @@ Section 3.4.2 describes the human data in Figure 4. The baseline comes from the 
   - **12-guess score:** Actual guesses used (loss = 13), keeping hard puzzles apart [1].
   - **6-guess score:** Same game cut at 6 guesses (loss = 7), matching the human scale because agents never see the limit.
   - **RQ1 Measures:** Within-puzzle SD, single-game **ICC(1,1)** and k-run mean **ICC(1,k)**.
-  - **RQ2 Measures:** **Pearson r**, **Spearman ρ** (with p-values), **Bias**, **MAE** (on 6-guess scale vs. constant baseline) and rank-based **D1-D4 confusion matrix**.
+  - **RQ2 Measures:** **Pearson r**, **Spearman ρ** (with p-values; `<0.2` very weak, `0.2-0.4` weak, `0.4-0.6` moderate, `>0.6` strong [1]), **Bias**, **MAE** (on 6-guess scale) and rank-based **D1-D4 confusion matrix**.
 
 **Spoken Script:**
 
@@ -283,12 +283,12 @@ Section 4.2 reports the RQ1 consistency results in Tables 3 and 4 across both ex
 | MAE (guesses) | - | 1.38 | - | 1.26 |
 
 - **Level Bias vs. Rank Category Agreement (Figure 5)**
-  - On the 6-guess score in Exp B, the playtester averages **5.54 guesses vs. 4.26 for humans** (**+1.28 bias**, **1.38 MAE**); in Exp A, 6-guess fail share is ~27 percentage points above humans.
-  - **Rank-Based Quartiles (Figure 5, Exp B):** **16 of 48 puzzles** fall on the exact diagonal, while **31 of 48** lie within one quartile. Five human D2 puzzles were placed in D4, yet **no human D4 puzzle was placed in D1** (Exp A: 4/12 exact, 10/12 within one quartile).
+  - On the 6-guess score, the playtester averaged more guesses than humans on **42 of 48 Exp B puzzles** and **11 of 12 Exp A puzzles** (**+1.28 bias**, **1.38 MAE** in Exp B), while losing **30.5% of Exp A games** within 6 guesses against **3.8% for humans**.
+  - **Rank-Based Quartiles (Figure 5, Exp B):** **16 of 48 puzzles** fell on the diagonal, while **31 of 48** lay in the same or a neighboring quartile. Five human D2 puzzles were placed in D4, while **no human D4 puzzle was placed in D1**.
 
 **Spoken Script:**
 
-Section 4.3 reports the RQ2 human agreement results in Table 5 and Figure 5. In Experiment B across 48 puzzles, the playtester's averages correlate with the human averages at Spearman rho equal to 0.34 with a p-value of 0.017. In Experiment A across 12 puzzles with 32 runs each, Spearman rho reaches 0.72 with a p-value of 0.008. On the 6-guess score, the playtester averaged 5.54 guesses on the Experiment B puzzles compared with 4.26 for humans. That is a bias of about 1.3 guesses with an MAE of 1.38 guesses. In Experiment A, the playtester also failed within six guesses about 27 percentage points more often than humans did. Figure 5 compares the rank-based difficulty quartiles for the 48 wide puzzles. Sixteen of the 48 puzzles fell on the diagonal while 31 lay within one quartile, with no human D4 puzzle placed in D1.
+Section 4.3 reports the RQ2 human agreement results in Table 5 and Figure 5. In Experiment B across 48 puzzles, the playtester's averages correlate with the human averages at Spearman rho equal to 0.34 with a p-value of 0.017. In Experiment A across 12 puzzles with 32 runs each, Spearman rho reaches 0.72 with a p-value of 0.008. On the 6-guess score, the playtester averaged more guesses than humans on 42 of 48 Experiment B puzzles and 11 of 12 Experiment A puzzles. It also lost 30.5 percent of its Experiment A games within six guesses, while humans lost 3.8 percent. Figure 5 compares the rank-based difficulty quartiles for the 48 wide puzzles. Sixteen of the 48 puzzles fell on the diagonal while 31 lay in the same or a neighboring quartile, with no human D4 puzzle placed in D1.
 
 ---
 
@@ -299,33 +299,34 @@ Section 4.3 reports the RQ2 human agreement results in Table 5 and Figure 5. In 
   - Averaging across repeated runs produces a highly reliable difficulty score (**ICC(1,k) = 0.97** at 32 runs; **0.73** even at 3 runs), showing why each puzzle must be played multiple times.
   - Larger spread on D4 puzzles comes from long games and occasional losses, which is necessary variance to separate hard puzzles from easy ones.
 - **5.2 RQ2 Analysis: Relative vs. Absolute Difficulty**
-  - Both experiments show statistically significant positive rank correlation ($p < 0.05$).
-  - Alignment is stronger in Exp A (**ρ = 0.72**) than Exp B (**ρ = 0.34**) because 32 runs reduce noise in each puzzle's mean; this matches the best 20-run correlation (**r = 0.62**) of Xiao and Yang [1].
-  - The **1.38 MAE** is more than twice the **0.55-guess width** of the middle two quartiles (3.98 to 4.53), while an MAE close to the bias (+1.28) shows that most error is a constant shift.
-  - **Core Finding:** Rank-based quartiles place two thirds of Exp B puzzles within one quartile, showing the playtester measures **relative difficulty** much better than **absolute difficulty**.
+  - Positive rank correlation ($p < 0.05$) is stronger in Exp A (**ρ = 0.72, r = 0.70**) than Exp B (**ρ = 0.34**) due to 32-run precision, comparable to the best 20-run **r = 0.62** of Xiao and Yang [1].
+  - The playtester plays **~1.3 guesses worse** than humans, losing **30.5% vs. 3.8%** within 6 guesses in Exp A; the **12-guess handicap** prevents hard puzzles from tying at 7.
+  - The **1.38 MAE** is over twice the **0.55-guess width** of D2-D3 (3.98 to 4.53), while an MAE close to the bias (+1.28) shows most error is a constant shift.
+  - Rank quartiles matched **16/48 exact** (vs. **~12** by 1/4 chance) and **31/48 within one quartile** (vs. **30** by 5/8 chance): only slightly better than random guessing, so the final study will judge agreement **mainly through ranks**.
 
 **Spoken Script:**
 
-Section 5 analyzes the experiment results, starting with RQ1 and RQ2 in Sections 5.1 and 5.2. For RQ1, a single run is only moderately consistent, as its ICC(1,1) of 0.49 means that about half of the score variance comes from run-to-run noise of about 1.5 guesses. However, the mean over many runs is highly reliable, reaching an ICC(1,k) of 0.97 at 32 runs and 0.73 at three runs. That is why a puzzle must be played several times before using its mean. Part of this spread comes from hard puzzles that produce long games and losses, which is needed to separate puzzles. For RQ2, the playtester ranks puzzles in the same direction as humans in both experiments. The ranking is stronger in Experiment A at 0.72 than in Experiment B at 0.34, which is close to the 0.62 correlation of Xiao and Yang [1]. However, the 1.38 MAE is more than twice the 0.55-guess width of the middle two quartiles, while an MAE close to the bias shows a constant shift. Thus, the playtester measures relative difficulty better than absolute difficulty.
+Section 5 analyzes the experiment results, starting with RQ1 and RQ2 in Sections 5.1 and 5.2. For RQ1, a single run is only moderately consistent, as its ICC(1,1) of 0.49 means that about half of the score variance comes from run-to-run noise of about 1.5 guesses. However, the mean over many runs is highly reliable, reaching an ICC(1,k) of 0.97 at 32 runs and 0.73 at three runs. For RQ2, the playtester ranks puzzles in the same direction as humans, with a Pearson r of 0.70 in Experiment A comparable to the 0.62 of Xiao and Yang [1]. Because the playtester lost 30.5 percent of Experiment A games within six guesses against 3.8 percent for humans, the 12-guess limit keeps hard puzzles apart. The 1.38 MAE is over twice the 0.55-guess width of the middle two quartiles. Meanwhile, rank categories matched 16 of 48 exact and 31 within one quartile, only slightly above the 12 and 30 expected by chance. Thus, the playtester measures relative difficulty better than absolute difficulty, so the final study will judge agreement mainly through ranks.
 
 ---
 
-## Slide 17: 5.3 - 5.4 Planned Expert Evaluation (RQ3) and Final Study Implications (13:55 - 15:00 | 1:05)
+## Slide 17: 5.3 - 5.5 Expert Evaluation (RQ3), Final Study Implications and Threats to Validity (13:55 - 15:00 | 1:05)
 
 - **5.3 RQ3: Expert Evaluation (Planned Next Stage)**
-  - Follows the completed quantitative analysis in the research schedule.
-  - **Mixed-Method Design:**
-    1. *Likert-scale survey (1 to 5):* Industry experts rate utility statements after inspecting the final RQ1 and RQ2 results; overall average score is reported.
-    2. *Semi-structured interviews:* Analyzed thematically, with each recurring theme reported as a share of the expert pool.
-- **5.4 Four Design Implications Fixed for the Final Study**
+  - Follows the quantitative analysis; 5-7 industry experts inspect the final RQ1 and RQ2 results.
+  - Combines a **Likert-scale survey (1 to 5)** (reporting the overall mean score) with **semi-structured interviews** (analyzed thematically as a share of the expert pool).
+- **5.4 Four Implications for the Final Study**
   1. **Run sizing per puzzle:** Set repetition count $k$ so the puzzle mean reaches a reliability target (such as **ICC(1,k) ≥ 0.9**).
   2. **Fixed RQ1 consistency margin (H1):** Set before the final run from pilot spread (such as within-puzzle **SD ≤ 0.5** on the 6-guess score).
-  3. **Primary RQ2 measures (H2):** Judge human agreement primarily through **rank correlation** and **rank-based quartiles**.
-  4. **Descriptive distribution case study:** Present the **3 easiest and 3 hardest puzzles** by human mean, using fresh puzzles never played in the pilot.
+  3. **Primary & secondary RQ2 measures (3 categories):** Use **rank correlation as primary** and rank-based categories as **secondary**; switch from **4 to 3 categories**, since whole-percent rounding leaves **77%** of puzzles category-uncertain with 4 categories against **63%** with 3.
+  4. **Descriptive distribution case study:** Present the **3 easiest and 3 hardest puzzles** by human mean on **fresh puzzles** never played in the pilot.
+- **5.5 Threats to Validity (Human Data)**
+  1. **Whole-percent rounding:** Shifts a puzzle's human mean by up to **~0.2 guesses**; in the worst case, **41 of 48 Exp B puzzles** could fall in a neighboring quartile since D2 and D3 are each **< 0.3 guesses wide**.
+  2. **Archive-specific cut-points:** Cut-points describe the Wordle archive only; **rank correlation** does not depend on them, supporting its use as the primary RQ2 measure.
 
 **Spoken Script:**
 
-Finally, Sections 5.3 and 5.4 cover the planned expert evaluation for RQ3 and the implications for the final study. The expert evaluation follows the quantitative analysis and combines a Likert-scale survey with semi-structured interviews. Five to seven experts will inspect the final RQ1 and RQ2 results and rate utility statements from 1 to 5, after which the mean rating and interview themes are reported. Before any final run begins, the pilot results fix four design choices for the final study on fresh unseen puzzles. First, the runs per puzzle will be set to reach a reliability target such as an ICC(1,k) of at least 0.9. Second, the H1 consistency margin, such as a within-puzzle standard deviation of at most 0.5 on the 6-guess score, will be fixed from the pilot spread. Third, the primary RQ2 measures will be the rank correlation and rank-based quartiles. Fourth, the three easiest and three hardest puzzles will be shown as a distribution case study. Thank you for your attention.
+Finally, Sections 5.3 through 5.5 cover the planned expert evaluation for RQ3, the implications for the final study and threats to validity. For RQ3, five to seven experts will inspect the final RQ1 and RQ2 results, rate utility statements from 1 to 5 and complete semi-structured interviews for thematic analysis. For the final study on fresh unseen puzzles, the pilot results fix four design choices. First, runs per puzzle will be sized to reach a reliability target such as an ICC(1,k) of at least 0.9. Second, the H1 consistency margin will be fixed from the pilot spread. Third, rank correlation will be the primary RQ2 measure while categories will be secondary. The final study will use three categories instead of four, reducing whole-percent rounding uncertainty from 77 percent to 63 percent of puzzles. Fourth, the three easiest and three hardest puzzles will be shown as a distribution case study. For threats to validity, whole-percent rounding can shift a puzzle mean by up to 0.2 guesses, which could move 41 of 48 Experiment B puzzles into a neighboring quartile. In addition, cut-points apply only to this archive, whereas rank correlation does not depend on cut-points. Thank you for your attention.
 
 ---
 

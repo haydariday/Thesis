@@ -29,6 +29,14 @@ REFS = {
     "klepek2017": 'P. Klepek, "\'Nioh\' suggests that \'Dark Souls\' actually invented a new genre," *Vice*, Feb. 10, 2017. [Online]. Available: https://www.vice.com/en/article/nioh-suggests-that-dark-souls-actually-invented-a-new-genre/',
     "baltaji2024": 'R. Baltaji, B. Hemmatian, and L. R. Varshney, "Persona inconstancy in multi-agent LLM collaboration: Conformity, confabulation, and impersonation," in *Proc. 2nd Workshop on Cross-Cultural Considerations in NLP (C3NLP)*, 2024, *arXiv:2405.03862*.',
     "chen2025": 'Y. Chen, S. Habchi, and L. Wei, "MIMIC: Integrating diverse personality traits for better game testing using large language model," in *Proc. 40th IEEE/ACM Int. Conf. Automated Software Engineering (ASE)*, 2025, *arXiv:2510.01635*.',
+    "drachen2009": 'A. Drachen, A. Canossa, and G. N. Yannakakis, "Player modeling using self-organization in Tomb Raider: Underworld," in *Proc. IEEE Symp. Computational Intelligence and Games (CIG)*, Milan, Italy, 2009, pp. 1–8, doi: 10.1109/CIG.2009.5286500.',
+    "wilson2014": 'R. C. Wilson, A. Geana, J. M. White, E. A. Ludvig, and J. D. Cohen, "Humans use directed and random exploration to solve the explore–exploit dilemma," *J. Exp. Psychol.: General*, vol. 143, no. 6, pp. 2074–2081, 2014, doi: 10.1037/a0038199.',
+    "bertsimas2025": 'D. Bertsimas and A. Paskov, "An exact solution to Wordle," *Operations Research*, vol. 73, no. 3, pp. 1384–1394, 2025, doi: 10.1287/opre.2022.0434.',
+    "liang2025": 'J. Liang, A. Kabbara, J. Liu, R. Luo, K. Kim, and M. Guerzhoy, "Semantic, orthographic, and phonological biases in humans\' Wordle gameplay," in *Findings of the Association for Computational Linguistics: IJCNLP-AACL 2025*, 2025, *arXiv:2411.18634*.',
+    "licato2025": 'J. Licato, S. Steinle, and B. Hollis, "Do persona-infused LLMs affect performance in a strategic reasoning game?" in *Proc. IJCNLP-AACL 2025*, 2025, *arXiv:2512.06867*.',
+    "atkins2022": 'T. Atkins Jr., "wordle-list," GitHub repository, Sep. 2022. [Online]. Available: https://github.com/tabatkins/wordle-list',
+    "thompson1987": 'S. K. Thompson, "Sample size for estimating multinomial proportions," *The American Statistician*, vol. 41, no. 1, pp. 42–46, 1987, doi: 10.1080/00031305.1987.10475440.',
+    "julious2005": 'S. A. Julious, "Sample size of 12 per group rule of thumb for a pilot study," *Pharmaceutical Statistics*, vol. 4, no. 4, pp. 287–291, 2005, doi: 10.1002/pst.185.',
     "stsdata": '[TODO: cite the source of the Slay the Spire run dataset released by Mega Crit (more than 75 million runs).]',
 }
 
