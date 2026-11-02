@@ -40,6 +40,7 @@ Other entry points (all `uv run python -m multi_agent_testing.…`):
 - `experiment.manifest` — puzzle eligibility audit (`audit_record`, shared by later modules) and pilot-01 sampling.
 - `experiment.manifest_pilot02` — pilot-02 deep/wide manifests, stratified by quartile (see README for the command).
 - `experiment.human_data` — rebuilds `src/data/processed/wordle_human_clean.csv` and `quartiles.json`.
+- `experiment.terciles` — final-study T1–T3 split (`terciles.json`, cut-points 4.07 / 4.42), built from the frozen clean CSV. Same rank rules as `quartiles.py`, whose functions take an optional `labels` tuple.
 - `experiment.plots f1 …` (human difficulty) and `experiment.plots pilot02 --analysis-dir … --output-dir …` (F2–F9) — figures. They are built only from processed/analysis files, never raw logs. Needs `uv sync --extra viz` (or `uv run --extra viz`).
 
 Live runs need `DEEPSEEK_API_KEY` (pilot-02, `--backend deepseek`) or `OPENCODE_API_KEY` (`--backend zen`) in the git-ignored `.env`. Never write keys to source, configs or logs. Provider hosts, key names and DeepSeek's `--thinking` rule live in `agent/providers.py`.

@@ -30,6 +30,12 @@ Rank split (mapping system scores by rank)
 A system that plays on another scale (for example with a 12-guess limit)
 is compared by rank instead: ``rank_split`` applies the same contiguous split
 to the system means of the puzzles at hand.
+
+Other group counts
+------------------
+Every function takes an optional ``labels`` tuple; the number of labels sets
+the number of groups. The defaults give D1..D4. :mod:`terciles` uses the same
+rules with T1..T3.
 """
 
 from collections.abc import Sequence
@@ -53,21 +59,37 @@ class QuartileSpec:
     ranges: tuple[tuple[float, float], ...]
     cut_points: tuple[float, ...]
     boundary_ties: tuple[int, ...]
+    labels: tuple[str, ...] = QUARTILE_LABELS
 
     def to_json(self) -> dict[str, object]:
         return {
-            "labels": list(QUARTILE_LABELS),
+            "labels": list(self.labels),
             "population_size": self.population_size,
             "sizes": list(self.sizes),
             "ranges": {
                 label: {"min": round(lo, 6), "max": round(hi, 6)}
-                for label, (lo, hi) in zip(QUARTILE_LABELS, self.ranges)
+                for label, (lo, hi) in zip(self.labels, self.ranges)
             },
             "cut_points": [round(c, 6) for c in self.cut_points],
             "boundary_ties": list(self.boundary_ties),
-            "mapping_rule": "D1: s < c1; D2: c1 <= s < c2; D3: c2 <= s < c3; D4: s >= c3",
+            "mapping_rule": mapping_rule(self.labels),
             "assignment_rule": "rank split of (human_mean_score, int(puzzle_id)), sizes differ by <= 1",
         }
+
+
+def mapping_rule(labels: Sequence[str]) -> str:
+    """Readable value rule, e.g. ``D1: s < c1; ...; D4: s >= c3``."""
+
+    k = len(labels)
+    parts = [f"{labels[0]}: s < c1"]
+    parts += [f"{labels[i]}: c{i} <= s < c{i + 1}" for i in range(1, k - 1)]
+    parts.append(f"{labels[-1]}: s >= c{k - 1}")
+    return "; ".join(parts)
+
+
+def _check_labels(labels: Sequence[str]) -> None:
+    if len(labels) < 2 or len(set(labels)) != len(labels):
+        raise ValueError("Need at least two distinct labels.")
 
 
 def _sort_key(item: RankedPuzzle) -> tuple[float, int]:
@@ -76,23 +98,26 @@ def _sort_key(item: RankedPuzzle) -> tuple[float, int]:
 
 def assign_quartiles(
     puzzles: Sequence[RankedPuzzle],
+    labels: Sequence[str] = QUARTILE_LABELS,
 ) -> tuple[dict[str, str], QuartileSpec]:
-    """Rank-split ``puzzles`` into D1..D4.
+    """Rank-split ``puzzles`` into D1..D4 (or one group per label).
 
-    Returns ``({puzzle_id: label}, spec)``. Requires at least four puzzles.
+    Returns ``({puzzle_id: label}, spec)``. Requires at least one puzzle per
+    label.
     """
 
+    _check_labels(labels)
     n = len(puzzles)
-    if n < len(QUARTILE_LABELS):
-        raise ValueError("Need at least four puzzles to form quartiles.")
+    k = len(labels)
+    if n < k:
+        raise ValueError(f"Need at least {k} puzzles to form {k} groups.")
     if len({p.puzzle_id for p in puzzles}) != n:
         raise ValueError("Puzzle ids must be unique.")
 
     ordered = sorted(puzzles, key=_sort_key)
-    k = len(QUARTILE_LABELS)
     groups = [ordered[i * n // k:(i + 1) * n // k] for i in range(k)]
 
-    labels = {p.puzzle_id: label for label, group in zip(QUARTILE_LABELS, groups) for p in group}
+    label_of = {p.puzzle_id: label for label, group in zip(labels, groups) for p in group}
     ranges = tuple((g[0].human_mean_score, g[-1].human_mean_score) for g in groups)
     cut_points = tuple(groups[i + 1][0].human_mean_score for i in range(k - 1))
     boundary_ties = tuple(
@@ -106,43 +131,54 @@ def assign_quartiles(
         ranges=ranges,
         cut_points=cut_points,
         boundary_ties=boundary_ties,
+        labels=tuple(labels),
     )
-    return labels, spec
+    return label_of, spec
 
 
-def rank_split(values: Sequence[float], tie_keys: Sequence[int]) -> list[str]:
-    """D1..D4 for each value by its rank within ``values``.
+def rank_split(
+    values: Sequence[float],
+    tie_keys: Sequence[int],
+    labels: Sequence[str] = QUARTILE_LABELS,
+) -> list[str]:
+    """D1..D4 (or one label per group) for each value by its rank in ``values``.
 
     The same contiguous split as ``assign_quartiles``, for system means that
     do not share the human scale. Ties on value are broken by ``tie_keys``
     (puzzle ids) and then by position, so a bootstrap sample may repeat a
-    puzzle. Requires at least four values.
+    puzzle. Requires at least one value per label.
     """
 
+    _check_labels(labels)
     n = len(values)
-    if n < len(QUARTILE_LABELS):
-        raise ValueError("Need at least four values to form quartiles.")
+    k = len(labels)
+    if n < k:
+        raise ValueError(f"Need at least {k} values to form {k} groups.")
     if len(tie_keys) != n:
         raise ValueError("Need one tie key per value.")
 
     order = sorted(range(n), key=lambda i: (values[i], tie_keys[i], i))
-    labels = [""] * n
-    k = len(QUARTILE_LABELS)
-    for group, label in enumerate(QUARTILE_LABELS):
+    out = [""] * n
+    for group, label in enumerate(labels):
         for position in order[group * n // k:(group + 1) * n // k]:
-            labels[position] = label
-    return labels
+            out[position] = label
+    return out
 
 
-def map_score(score: float, cut_points: Sequence[float]) -> str:
-    """Map a mean guess score to D1..D4 with the value rule above."""
+def map_score(
+    score: float,
+    cut_points: Sequence[float],
+    labels: Sequence[str] = QUARTILE_LABELS,
+) -> str:
+    """Map a mean guess score to D1..D4 (or ``labels``) with the value rule above."""
 
-    if len(cut_points) != len(QUARTILE_LABELS) - 1:
-        raise ValueError("Expected three cut-points.")
+    _check_labels(labels)
+    if len(cut_points) != len(labels) - 1:
+        raise ValueError(f"Expected {len(labels) - 1} cut-points.")
     if list(cut_points) != sorted(cut_points):
         raise ValueError("Cut-points must be non-decreasing.")
 
-    for label, cut in zip(QUARTILE_LABELS, cut_points):
+    for label, cut in zip(labels, cut_points):
         if score < cut:
             return label
-    return QUARTILE_LABELS[-1]
+    return labels[-1]
