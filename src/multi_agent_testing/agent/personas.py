@@ -19,6 +19,21 @@ from .agent_role import AgentRole
 from .backend import ModelBackend, ScriptedBackend
 from .persona_spec import ActionRule, PersonaSpec, Slot
 
+# Final study C3: one instruction without a playstyle, shared by three
+# advisor keys so the debate and the statistics can still tell them apart.
+NEUTRAL_ADVISOR_INSTRUCTION = (
+    "You are an advisor in a Wordle playtesting system. "
+    "Critique the GM's proposal and suggest the guess you think is best. "
+    "If the proposal is already the best guess, return it unchanged."
+)
+NEUTRAL_ADVISOR_TASK = (
+    "Critique the current GM proposal. "
+    "Suggest the guess you think is best and explain why. "
+    "If the proposal is already the best guess, return it unchanged. "
+    "Set stop to false."
+)
+NEUTRAL_ADVISOR_KEYS: tuple[str, ...] = ("neutral_1", "neutral_2", "neutral_3")
+
 _PERSONA_LIST: tuple[PersonaSpec, ...] = (
     PersonaSpec(
         key="neutral_gm_v1",
@@ -149,6 +164,16 @@ _PERSONA_LIST: tuple[PersonaSpec, ...] = (
         ),
         task="Choose the next guess and explain why. Set stop to false.",
     ),
+    *(
+        PersonaSpec(
+            key=key,
+            display_name=f"Advisor {number}",
+            slot=Slot.ADVISOR,
+            instruction=NEUTRAL_ADVISOR_INSTRUCTION,
+            task=NEUTRAL_ADVISOR_TASK,
+        )
+        for number, key in enumerate(NEUTRAL_ADVISOR_KEYS, start=1)
+    ),
 )
 
 PERSONAS: dict[str, PersonaSpec] = {spec.key: spec for spec in _PERSONA_LIST}
@@ -167,6 +192,7 @@ PRESETS: dict[str, Preset] = {
     "pilot-02": Preset(gm="neutral_gm", advisors=("bold", "cautious", "casual")),
     "pilot-02-core": Preset(gm="neutral_gm", advisors=("bold", "cautious")),
     "solo": Preset(gm="solo_player", advisors=()),
+    "neutral": Preset(gm="neutral_gm", advisors=NEUTRAL_ADVISOR_KEYS),
 }
 
 

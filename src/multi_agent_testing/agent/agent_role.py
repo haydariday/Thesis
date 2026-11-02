@@ -8,3 +8,6 @@ class AgentRole(StrEnum):
     BOLD = "bold"
     CAUTIOUS = "cautious"
     CASUAL = "casual"
+    NEUTRAL_1 = "neutral_1"
+    NEUTRAL_2 = "neutral_2"
+    NEUTRAL_3 = "neutral_3"

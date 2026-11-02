@@ -11,6 +11,7 @@ from ..orchestra.debate_context import new_debate_state
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 PILOT_01_RUN = REPO_ROOT / "experiments" / "pilot-01" / "runs" / "puzzle-234-rep1-attempt1.json"
+PILOT_02_CONFIG = REPO_ROOT / "experiments" / "pilot-02-vb-wide" / "experiment_config.json"
 
 
 class TaskRecordingBackend:
@@ -135,6 +136,31 @@ class SoloLineupTest(unittest.TestCase):
                 "Keep reason short: at most two sentences and about 40 words. "
                 "Advisors must set stop to false."
             ))
+
+
+class NeutralLineupTest(unittest.TestCase):
+    def test_three_identical_advisors_under_distinct_keys(self):
+        lineup = create_lineup(preset="neutral")
+        self.assertEqual(lineup.gm.persona, PERSONAS["neutral_gm"])
+        self.assertEqual([a.persona.key for a in lineup.advisors], ["neutral_1", "neutral_2", "neutral_3"])
+        self.assertEqual([a.role for a in lineup.advisors],
+                         [AgentRole.NEUTRAL_1, AgentRole.NEUTRAL_2, AgentRole.NEUTRAL_3])
+        self.assertEqual([a.name for a in lineup.advisors], ["Advisor 1", "Advisor 2", "Advisor 3"])
+        self.assertEqual(len({a.instruction for a in lineup.advisors}), 1)
+        self.assertEqual(len({a.persona.task for a in lineup.advisors}), 1)
+        for agent in lineup.advisors:
+            self.assertEqual(agent.persona.action_rule, ActionRule.ANY)
+
+    def test_neutral_text_names_no_playstyle(self):
+        spec = PERSONAS["neutral_1"]
+        for word in ("bold", "cautious", "casual", "risk", "common", "rule out"):
+            self.assertNotIn(word, (spec.instruction + spec.task).lower())
+
+    @unittest.skipUnless(PILOT_02_CONFIG.exists(), "pilot-02 config not present")
+    def test_pilot_02_preset_matches_recorded_config(self):
+        # C1 must keep the persona text of the pilot-02 vB runs.
+        recorded = json.loads(PILOT_02_CONFIG.read_text(encoding="utf-8"))
+        self.assertEqual(create_lineup(preset="pilot-02").config(), recorded["settings"]["personas"])
 
 
 class LineupConfigTest(unittest.TestCase):

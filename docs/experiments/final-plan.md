@@ -58,6 +58,8 @@ Task draft: "Critique the current GM proposal. Suggest the guess you think is be
 
 The pilot-02 persona text stays byte-identical, since `resume` refuses a changed registry and C1 must match the persona design reported in Chapter 3.
 
+Implemented at F4 as preset `neutral`: `neutral_gm` with `neutral_1`, `neutral_2` and `neutral_3` (display names "Advisor 1" to "Advisor 3"), which share the instruction and task above and have no action rule. A test checks the `pilot-02` preset against the persona block recorded in `experiments/pilot-02-vb-wide/experiment_config.json`.
+
 ## 3. Research questions
 
 The three research questions keep their wording. C2 and C3 add no research question of their own. They serve as baselines inside the existing questions, mainly RQ2, so the study stays a validation of the persona debate. Adopted at F0. The roadmap and README now include C2 and C3 in the final-study scope. The thesis still uses RQ3 for the expert evaluation, so the RQ3 numbering stays open for the supervisor (Section 9).
@@ -115,7 +117,7 @@ The references in this section were cited from memory and must be checked before
 | Debate (C1, C3) | `--max-rounds 3`, `--max-repairs 2` |
 | C2 | one decision per turn, `--max-repairs 2` |
 | Requests | `--request-timeout 300 --api-retries 1 --max-attempts 2` |
-| Personas | C1 `--persona-preset pilot-02`, C2 the new solo preset, C3 the new neutral preset (names fixed at F3 and F4) |
+| Personas | C1 `--persona-preset pilot-02`, C2 `--persona-preset solo`, C3 `--persona-preset neutral` |
 | Runs | `--repetitions 10`, `--workers 4` (8 if the smoke test shows no rate limits) |
 | Output | `experiments/final-c1`, `experiments/final-c2`, `experiments/final-c3` |
 
