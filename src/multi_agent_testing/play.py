@@ -92,7 +92,7 @@ def play_wordle_game(
     run: RunLog,
     max_rounds: int,
     max_repairs: int,
-    debate_protocol: DebateProtocol = DebateProtocol.SEQUENTIAL,
+    debate_protocol: DebateProtocol = DebateProtocol.PARALLEL,
     stream: bool = False,
     echo: bool = False,
     raise_errors: bool = True,

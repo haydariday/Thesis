@@ -162,8 +162,8 @@ def main() -> None:
     parser.add_argument(
         "--debate-protocol",
         choices=[p.value for p in DebateProtocol],
-        default=DebateProtocol.SEQUENTIAL.value,
-        help="sequential (pilot) or blind: advisors of one round answer independently.",
+        default=DebateProtocol.PARALLEL.value,
+        help="parallel (default): advisors of one round answer independently; sequential: the pilot protocol.",
     )
 
     add_persona_arguments(parser, default_preset="pilot-02")

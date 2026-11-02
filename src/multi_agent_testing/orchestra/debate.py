@@ -28,7 +28,7 @@ def create_debate_graph(
     validate_action: Callable[[str], str] | None = None,
     max_repairs: int = 1,
     recorder: CallRecorder | None = None,
-    debate_protocol: DebateProtocol = DebateProtocol.SEQUENTIAL,
+    debate_protocol: DebateProtocol = DebateProtocol.PARALLEL,
 ):
     """Build the debate using validated model decisions.
 
@@ -97,12 +97,12 @@ def create_debate_graph(
         *,
         allow_stop: bool = False,
         action_rule: ActionRule = ActionRule.ANY,
-        blind: bool = False,
+        parallel: bool = False,
     ) -> AgentDecision:
-        # A blind advisor sees neither this round's suggestions nor the
+        # A parallel advisor sees neither this round's suggestions nor the
         # transcript lines they added.
-        suggestions = {} if blind else state["suggestions"]
-        transcript = state["transcript"][: state["round_start"]] if blind else state["transcript"]
+        suggestions = {} if parallel else state["suggestions"]
+        transcript = state["transcript"][: state["round_start"]] if parallel else state["transcript"]
         payload: dict = (
             {"game_context": state["context"], "task": task}
             if lineup.solo
@@ -259,7 +259,7 @@ def create_debate_graph(
             "round_start": len(transcript),
         }
 
-    blind = debate_protocol == DebateProtocol.BLIND
+    parallel = debate_protocol == DebateProtocol.PARALLEL
 
     def advisor_node(agent: Agent) -> tuple[str, NodeFn]:
         spec = agent.persona
@@ -268,7 +268,7 @@ def create_debate_graph(
 
         def node(state: DebateState) -> dict:
             try:
-                decision = ask(agent, state, spec.task, action_rule=spec.action_rule, blind=blind)
+                decision = ask(agent, state, spec.task, action_rule=spec.action_rule, parallel=parallel)
             except RepairExhausted:
                 # Advice is optional: the GM reviews without this advisor.
                 return {

@@ -410,7 +410,7 @@ def execute_plan(
     backend = build_backend(settings)
     allowed_guesses = load_allowed_guesses(Path(config["guess_list"]))
     max_guesses = settings.get("max_guesses", STANDARD_GUESSES)
-    # Configs written before the blind protocol existed ran sequential debates.
+    # Configs written before the parallel protocol existed ran sequential debates.
     debate_protocol = settings.get("debate_protocol", DebateProtocol.SEQUENTIAL.value)
 
     puzzle_cache: dict[str, WordlePuzzle] = {}
@@ -845,9 +845,9 @@ def main() -> None:
     start.add_argument(
         "--debate-protocol",
         choices=[p.value for p in DebateProtocol],
-        default=DebateProtocol.SEQUENTIAL.value,
-        help="sequential (pilot): advisors read the earlier suggestions of the round; "
-        "blind: advisors of one round answer independently.",
+        default=DebateProtocol.PARALLEL.value,
+        help="parallel (default): advisors of one round answer independently; "
+        "sequential (pilot): advisors also read the earlier suggestions of the round.",
     )
     start.add_argument("--request-timeout", type=float, default=300.0)
     start.add_argument("--api-retries", type=int, default=1)

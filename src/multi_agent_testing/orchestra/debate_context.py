@@ -5,15 +5,16 @@ from typing import Any, NotRequired, Protocol, TypedDict
 class DebateProtocol(StrEnum):
     """What an advisor sees of the current round.
 
-    ``sequential`` (the pilot protocol): each advisor reads the suggestions
-    the earlier advisors gave in the same round. ``blind``: each advisor
-    reads only the GM's current proposal and the transcript up to the start
-    of the round, so the advisors of one round answer independently. The GM
-    review sees every suggestion in both protocols.
+    ``parallel`` (the default, the final-study protocol): each advisor reads
+    only the GM's current proposal and the transcript up to the start of the
+    round, so the advisors of one round answer independently, as if in
+    parallel. ``sequential`` (the pilot protocol): each advisor also reads the
+    suggestions the earlier advisors gave in the same round. The GM review
+    sees every suggestion in both protocols.
     """
 
     SEQUENTIAL = "sequential"
-    BLIND = "blind"
+    PARALLEL = "parallel"
 
 
 class Termination(StrEnum):
@@ -53,7 +54,7 @@ class DebateState(TypedDict):
     # Recovery steps taken this turn, e.g. "abstained:bold".
     fallbacks: list[str]
     transcript: list[str]
-    # Transcript length when the current round's advisors began; a blind
+    # Transcript length when the current round's advisors began; a parallel
     # advisor sees only transcript[:round_start].
     round_start: int
     final_action: str

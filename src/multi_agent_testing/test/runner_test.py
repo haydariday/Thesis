@@ -143,11 +143,12 @@ class RunnerPersonaTest(unittest.TestCase):
             self.assertFalse(self.experiment.exists())
 
 
-    def test_blind_protocol_is_recorded_and_kept_on_resume(self):
-        self.start("--persona-preset", "pilot-02", "--debate-protocol", "blind")
-        self.assertEqual(self.config()["settings"]["debate_protocol"], "blind")
+    def test_sequential_protocol_is_recorded(self):
+        # The pilot protocol must stay selectable now that parallel is the default.
+        self.start("--persona-preset", "pilot-02", "--debate-protocol", "sequential")
+        self.assertEqual(self.config()["settings"]["debate_protocol"], "sequential")
         run = json.loads((self.experiment / "runs" / "puzzle-0-rep1-attempt1.json").read_text(encoding="utf-8"))
-        self.assertEqual(run["metadata"]["debate_protocol"], "blind")
+        self.assertEqual(run["metadata"]["debate_protocol"], "sequential")
 
     def test_config_without_protocol_resumes_as_sequential(self):
         self.start("--persona-preset", "pilot-02", "--max-runs", "0")
@@ -176,7 +177,7 @@ class RunnerPersonaTest(unittest.TestCase):
         self.assertTrue(settings["json_mode"])
         self.assertEqual(settings["thinking"], "disabled")
         self.assertEqual(settings["temperature"], 0.2)
-        self.assertEqual(settings["debate_protocol"], "sequential")
+        self.assertEqual(settings["debate_protocol"], "parallel")  # the default
         self.assertEqual(settings["api_key_env"], "DEEPSEEK_API_KEY")
         run = json.loads((self.experiment / "runs" / "puzzle-0-rep1-attempt1.json").read_text(encoding="utf-8"))
         self.assertEqual(run["metadata"]["thinking"], "disabled")

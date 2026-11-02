@@ -18,7 +18,7 @@ Herding: advisors speak in a fixed order and see the earlier advice of the
 round.  ``herding_counts`` counts, per advisor, the suggestions that differ
 from the GM's proposal (dissents) and how many of them repeat a dissent an
 earlier advisor gave in the same round.  The first speaker cannot copy, so
-its share is reported as None.  Under the blind debate protocol no
+its share is reported as None.  Under the parallel debate protocol no
 advisor sees the earlier advice of its round, so the same count then
 measures how often independent advisors name the same word by chance.
 

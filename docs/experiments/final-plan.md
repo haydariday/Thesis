@@ -16,6 +16,7 @@ The pilot validated the persona-based debate on its own. The final study adds tw
 | Difficulty categories | Terciles (cut-points 4.07 and 4.42 over the 1,861 eligible puzzles), as decided in the progress report on 2026-10-23. The puzzles are drawn by tercile (changed from quartiles on 2 November 2026, before any final game). Quartiles stay as a sensitivity check. Adopted at F0, frozen at F1 in `terciles.json`. |
 | Reporting | Values with p-values, without resampling. Spearman ρ and Pearson r carry their t-test p-values as in the pilot, paired condition contrasts use the Wilcoxon signed-rank test over puzzles, and the persona checks use rank tests over games (Section 7). Decided on 2 November 2026, replacing the bootstrap intervals of the draft. |
 | Budget | About $55 including retries and smoke tests. Stop and review above $70 (Section 6.3). Adopted at F0. |
+| Debate protocol | `parallel`: the advisors of a round answer independently (Section 2.0). Changed from the pilot's `sequential` protocol after the F7 smoke tests. |
 | Pooling | None. The new code makes this a new configuration, so no pilot game counts toward the final study (README reuse rule 3). |
 
 ## 2. Conditions
@@ -34,14 +35,14 @@ The contrasts are planned in advance:
 
 C1 against C2 is reported as the overall difference but is not a separate test.
 
-### 2.0 Debate protocols
+### 2.0 Debate protocol
 
-Two protocols are implemented (runner flag `--debate-protocol`, recorded in each config):
+The final study uses the **parallel** protocol (decided on 2 November 2026, the default of the runner flag `--debate-protocol`, recorded in each config):
 
-- **`sequential`** (the pilot protocol, frozen at `final-frozen`): each advisor reads the GM's proposal and the suggestions of the earlier advisors in the same round.
-- **`blind`** (added on 2 November 2026): each advisor reads the GM's proposal and the transcript up to the start of the round, but not the other advisors' advice of that round. The advisors of a round therefore answer independently, while the GM review still sees every suggestion. Later rounds see the earlier rounds in full. This follows debates in which agents see each other's answers only from the previous round [Du et al.].
+- **`parallel`** (final study, default): each advisor reads the GM's proposal and the transcript up to the start of the round, but not the other advisors' advice of that round. The advisors of a round therefore answer independently, as if in parallel, while the GM review still sees every suggestion. Later rounds see the earlier rounds in full. This follows debates in which agents see each other's answers only from the previous round [Du et al.].
+- **`sequential`** (the pilot protocol): each advisor also reads the suggestions of the earlier advisors in the same round. It stays selectable with `--debate-protocol sequential`, so the pilot can be reproduced. Configs written before the flag existed resume as `sequential`.
 
-C2 has no advisors, so the protocol does not affect it. Which protocol the final study uses is open (Section 9). Switching to `blind` removes same-round order effects and herding by design, but changes the protocol validated in the pilot, so it needs new C1 and C3 smoke tests and a new freeze.
+Why the change: the F7 smoke runs under `sequential` showed that later advisors mostly repeat the first dissent (herding, Section 6.4), and that the fixed order ties each persona to one position. Under `parallel` neither can happen within a round. The cost is that the final system differs from the one the pilot validated: the persona text, GM and game knowledge are unchanged, but the advisors no longer hear each other within a round. C2 has no advisors, so the protocol does not affect it. The advisors are still called in the fixed order, which no longer matters within a round.
 
 ### 2.1 C2 single agent
 
@@ -127,7 +128,7 @@ The references in this section were cited from memory and must be checked before
 | Backend | DeepSeek API, chat protocol, `deepseek-flash`. Record the returned `model` and `system_fingerprint` of every call. |
 | Sampling | thinking `enabled`, `--reasoning-effort low`, `--max-tokens 4096`, JSON mode, no temperature |
 | Game | `--max-guesses 6`, hidden from the agents |
-| Debate (C1, C3) | `--max-rounds 3`, `--max-repairs 2` |
+| Debate (C1, C3) | `--max-rounds 3`, `--max-repairs 2`, `--debate-protocol parallel` |
 | C2 | one decision per turn, `--max-repairs 2` |
 | Requests | `--request-timeout 300 --api-retries 1 --max-attempts 2` |
 | Personas | C1 `--persona-preset pilot-02`, C2 `--persona-preset solo`, C3 `--persona-preset neutral` |
@@ -161,7 +162,7 @@ uv run python -m multi_agent_testing.experiment.runner start \
   --backend deepseek --protocol chat --model deepseek-flash \
   --base-url 'https://api.deepseek.com' \
   --thinking enabled --reasoning-effort low --max-tokens 4096 --json-mode \
-  --max-guesses 6 --max-rounds 3 --max-repairs 2 \
+  --max-guesses 6 --max-rounds 3 --max-repairs 2 --debate-protocol parallel \
   --request-timeout 300 --api-retries 1 \
   --repetitions 10 --max-attempts 2 --workers 4 \
   --persona-preset pilot-02
@@ -184,7 +185,7 @@ Budget about $55 including retries and smoke tests. Stop and review if the spend
 
 ### 6.4 Smoke test results (F7, 2 November 2026)
 
-Smoke manifest × 2 games per condition, frozen settings of Section 6.1 with `--workers 4`, code revision `4585702`, clean tree. The three conditions ran at the same time. Outputs are in `runs/final-smoke-c1`, `-c2` and `-c3`.
+Smoke manifest × 2 games per condition, settings of Section 6.1 with `--workers 4` and the **sequential** debate protocol (before the switch to parallel), code revision `4585702`, clean tree. The three conditions ran at the same time. Outputs are in `runs/final-smoke-c1`, `-c2` and `-c3`.
 
 | | C1 | C2 | C3 |
 |---|---|---|---|
@@ -237,9 +238,9 @@ A new `experiment/analysis_final.py` reads the three experiment directories, reu
 
 - Paired per-puzzle differences in absolute error (for MAE), signed error (for bias) and within-puzzle SD, each tested with the two-sided Wilcoxon signed-rank test over the 100 puzzles. The mean difference is reported as the effect size. Holm correction over the two contrasts, per measure.
 - ρ for each condition against zero with its p-value. The ρ difference between conditions is reported as a value only, since a test of it would need several hundred puzzles (Section 5).
-- **Persona check (primary, position-matched).** Bold and `neutral_1` speak first, Cautious and `neutral_2` second, and each sees the same earlier advice. Each advisor gets a non-candidate share per game (suggestions after turn 1). For each puzzle, the mean per-game difference second minus first speaker is taken in C1 (Cautious − Bold) and in C3 (`neutral_2` − `neutral_1`). A two-sided Wilcoxon signed-rank test over the puzzles in both conditions tests C1's difference minus C3's. The personas count as working if it is significant with C1's difference larger. Position and exposure are the same in both conditions, so what remains is the persona text. Puzzles are the unit, as in the outcome contrasts.
+- **Persona check (primary, position-matched).** Bold and `neutral_1` are called first, Cautious and `neutral_2` second. Under the parallel protocol neither sees the other's advice of the round, so C3's gap is the difference two advisors with one shared instruction show by chance. Each advisor gets a non-candidate share per game (suggestions after turn 1). For each puzzle, the mean per-game difference second minus first speaker is taken in C1 (Cautious − Bold) and in C3 (`neutral_2` − `neutral_1`). A two-sided Wilcoxon signed-rank test over the puzzles in both conditions tests C1's difference minus C3's. The personas count as working if it is significant with C1's difference larger. Position and exposure are the same in both conditions, so what remains is the persona text. Puzzles are the unit, as in the outcome contrasts.
 - **Descriptive persona tests.** `cautious_vs_bold` (Wilcoxon on per-game Cautious − Bold in C1) and `advisor_difference` (Friedman across the advisors of a condition) stay in `metrics.json`. They treat games as independent, although each puzzle is played 10 times, so they are not used for the verdict.
-- **Herding (descriptive).** For each advisor, the share of its dissents (suggestions that differ from the GM's proposal) that repeat a dissent an earlier advisor gave in the same round. The first speaker cannot copy. Reported per condition in `persona_stats.csv` (`dissents`, `dissent_copies`, `herding_share`). In the F7 smoke runs: Cautious 1 of 99, Casual 9 of 43, `neutral_2` 17 of 20 and `neutral_3` 21 of 23.
+- **Same-word share (descriptive, formerly herding).** For each advisor, the share of its dissents (suggestions that differ from the GM's proposal) that name the same word as an earlier-called advisor's dissent in that round. Under the parallel protocol the advisors cannot see each other, so this measures how often independent advisors agree on an alternative. Reported in `persona_stats.csv` (`dissents`, `dissent_copies`, `herding_share`). Under the sequential protocol in the first F7 smoke runs it was Cautious 1 of 99, Casual 9 of 43, `neutral_2` 17 of 20 and `neutral_3` 21 of 23, which motivated the switch.
 - Implemented at F5 and F6 in `persona_stats.py`, `nonparametric.py` (stdlib Wilcoxon and Friedman, checked against scipy) and `analysis_final.py`.
 
 **Implemented at F6** as `experiment/analysis_final.py`. The constant-guess baseline is the MAE of predicting every puzzle at the human mean of the puzzles at hand (`constant_baseline_mae`). Next to it, `bias_corrected_mae` removes the condition's own bias, so a value below the baseline shows puzzle-level information beyond a constant shift. A fingerprint warning is written when the conditions ran on more than one `system_fingerprint`. Run after F9:
@@ -258,8 +259,8 @@ The final study uses two ablations, C2 (no debate) and C3 (no personas). Other d
 
 | Limitation | Evidence or control |
 |---|---|
-| Advisors speak in one fixed order (Bold → Cautious → Casual), so the results hold for this order. Order effects are reported in LLM debates. | The position-matched persona check holds position fixed within this order. Optional order ablation in Section 9. |
-| Advisors see the earlier advice of the same round, which invites herding. | Herding is measured per advisor and condition. |
+| The final protocol (parallel) differs from the pilot's (sequential), so the pilot's persona results are not a direct preview of the final ones. | Both protocols are recorded; the pilot can be rerun with `--debate-protocol sequential`. |
+| Advisors still see the previous rounds, so they can influence each other across rounds, and the GM sees the advisors in a fixed order. | The same-word share is reported per advisor and condition. |
 | C1 − C3 removes three things at once: playstyle content, advisors that differ from each other, and persona names the GM can weigh. | The position-matched check shows whether the persona text changes behaviour. It cannot split the outcome effect. |
 | C3 − C2 also differs in compute (about 37 against 4 calls per game). | Calls, tokens and seconds per game are reported per condition. |
 | The neutral C3 prompt was revised after the first smoke test, while the persona text was not. | Recorded with its reason in Sections 2.2 and 6.4. |
@@ -292,8 +293,8 @@ The final study uses two ablations, C2 (no debate) and C3 (no personas). Other d
 - **After the first chunk of each condition in F9:** check the fingerprints, the failure rate and the spend before continuing.
 
 ## 9. Open questions for the supervisor
-- **Debate protocol for the final study: `sequential` (frozen now) or `blind` (Section 2.0)?** `blind` removes the order and herding limitations of Section 7.1 and makes the persona check a direct Cautious − Bold comparison, but the final system then differs from the one the pilot and the progress report describe. If `blind` is chosen: rerun the C1 and C3 smoke tests, update Sections 6.1 and 7, and move the `final-frozen` tag. **F9 waits for this decision.**
-- Advisors speak in a fixed order and see the earlier advice of the same round, as in the pilot. F7 shows strong herding in C3. The plan reports both as limitations (Section 7.1). Optional add-on, decided before F8: an **order ablation** under RQ3 as a pre-registered robustness check. C1 with the reversed order (Casual → Cautious → Bold) on the 100 final puzzles × 3 runs (300 games, about $6 and 4–5 hours). It reports adoption, herding and non-candidate shares per persona by position (RQ3) and, descriptively, Spearman ρ and bias against the main C1 run (RQ2). It adds no research question and never pools with C1. A blind-advisor variant is not proposed, since it would change the protocol validated in the pilot. **Decided on 2 November 2026: the order ablation is skipped. Order and herding are reported as limitations (Section 7.1).**
+- **Decided on 2 November 2026: the final study uses the parallel protocol (Section 2.0).** The C1 and C3 smoke tests are rerun under it (F7), then the configuration is frozen again (F8). The method chapter must describe the change from the pilot's sequential protocol.
+- *Superseded:* the order ablation and the order and herding limitations were discussed for the sequential protocol. With the parallel protocol (Section 2.0) the advisors of a round no longer see each other, so the order ablation was dropped (decided on 2 November 2026).
 
 - RQ3 in the thesis (expert evaluation) against persona behavior here, and whether C2 and C3 as baselines inside RQ1 to RQ3 are enough without a separate comparison question.
 - Whether terciles replace quartiles as the category scheme of the final study.

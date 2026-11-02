@@ -77,8 +77,10 @@ uv run python -m multi_agent_testing.experiment.runner start \
   --max-rounds 3 --max-repairs 1 \
   --request-timeout 300 --api-retries 1 \
   --repetitions 32 --max-attempts 2 \
-  --persona-preset pilot-02
+  --persona-preset pilot-02 --debate-protocol sequential
 ```
+
+The pilot used the `sequential` debate protocol. The final study uses `parallel`, which is now the default (`--debate-protocol`), so pass `--debate-protocol sequential` to reproduce a pilot run.
 
 Personas: `runner start` needs `--persona-preset {pilot-01,pilot-02,pilot-02-core}` or `--advisors bold,cautious[,casual]` (speaking order), optional `--gm`. `debate_test` defaults to `pilot-02`. The keys and full persona text go to `settings.personas` in `experiment_config.json` and to each run's metadata. `resume` rebuilds the line-up from the config and refuses if the registry text has changed since `start`.
 

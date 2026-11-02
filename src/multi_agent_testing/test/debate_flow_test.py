@@ -491,7 +491,8 @@ class DebateFlowTests(unittest.TestCase):
             {key: value["action"] for key, value in review_1.items()},
             {"bold": "SLATE", "cautious": "CRANE", "casual": "RAISE"},
         )
-        self.assertEqual(payloads[2]["suggestions"], {"bold": {"action": "SLATE", "reason": "test reason"}})
+        # Parallel (default): Cautious does not see Bold's suggestion of the same round.
+        self.assertEqual(payloads[2]["suggestions"], {})
         self.assertEqual(payloads[5]["suggestions"], {})  # round 2, first advisor
         # Every agent gets the same reply-length limit.
         for system, _ in backend.calls:
@@ -618,8 +619,8 @@ class DebateProtocolTests(unittest.TestCase):
         )
         return backend.calls
 
-    def test_blind_advisors_see_no_same_round_advice(self):
-        calls = self.run_turn(DebateProtocol.BLIND)
+    def test_parallel_advisors_see_no_same_round_advice(self):
+        calls = self.run_turn(DebateProtocol.PARALLEL)
         seen = [(len(p["suggestions"]), len(p["transcript"])) for _, p in calls]
         # propose, 3 advisors, review, 3 advisors, review
         self.assertEqual(seen, [(0, 0), (0, 1), (0, 1), (0, 1), (3, 4), (0, 5), (0, 5), (0, 5), (3, 8)])
@@ -631,21 +632,22 @@ class DebateProtocolTests(unittest.TestCase):
         seen = [(len(p["suggestions"]), len(p["transcript"])) for _, p in calls]
         self.assertEqual(seen, [(0, 0), (0, 1), (1, 2), (2, 3), (3, 4), (0, 5), (1, 6), (2, 7), (3, 8)])
 
-    def test_default_is_sequential(self):
+    def test_default_is_parallel(self):
         backend = RecordingSequenceBackend(
             [completion(word, index == 8) for index, word in enumerate(self.WORDS)]
         )
         create_debate_graph(create_lineup(backend, preset="neutral")).invoke(new_debate_state("ctx", max_rounds=2))
-        self.assertEqual(len(backend.calls[2][1]["suggestions"]), 1)
+        self.assertEqual(backend.calls[2][1]["suggestions"], {})
+        self.assertEqual(DebateProtocol("parallel"), DebateProtocol.PARALLEL)
 
-    def test_blind_game_logs_every_suggestion(self):
+    def test_parallel_game_logs_every_suggestion(self):
         game = WordleGame(WordlePuzzle("0", "CIGAR"), allowed_guesses={"CIGAR", "RAISE", "SLATE"}, max_attempts=1)
         backend = SequenceBackend([completion(w, i == 4) for i, w in enumerate(["RAISE", "SLATE", "RAISE", "SLATE", "SLATE"])])
         with tempfile.TemporaryDirectory() as directory:
             run = play_wordle_game(
                 game=game, bridge=WordleBridge(game), lineup=create_lineup(backend, preset="pilot-02"),
                 run=RunLog(metadata={}, path=Path(directory) / "run.json"),
-                max_rounds=1, max_repairs=1, debate_protocol=DebateProtocol.BLIND, raise_errors=False,
+                max_rounds=1, max_repairs=1, debate_protocol=DebateProtocol.PARALLEL, raise_errors=False,
             )
         turn = run.data["turns"][0]
         self.assertEqual(turn["final_action"], "SLATE")
@@ -654,7 +656,7 @@ class DebateProtocolTests(unittest.TestCase):
 
     def test_solo_ignores_the_protocol(self):
         backend = RecordingSequenceBackend([completion("SLATE", False)])
-        create_debate_graph(create_lineup(backend, preset="solo"), debate_protocol=DebateProtocol.BLIND).invoke(
+        create_debate_graph(create_lineup(backend, preset="solo"), debate_protocol=DebateProtocol.PARALLEL).invoke(
             new_debate_state("ctx", max_rounds=3)
         )
         self.assertEqual(set(backend.calls[0][1]), {"game_context", "task"})
