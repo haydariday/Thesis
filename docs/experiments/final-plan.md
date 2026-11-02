@@ -14,7 +14,7 @@ The pilot validated the persona-based debate on its own. The final study adds tw
 | Size | 100 fresh puzzles (25 per human quartile) × 10 runs × 3 conditions = 3,000 games (Section 5). |
 | Pairing | Every condition plays the same 100 puzzles with the same 10 repetitions, so every comparison is paired by puzzle. |
 | Difficulty categories | Terciles (cut-points 4.07 and 4.42 over the 1,861 eligible puzzles), as decided in the progress report on 2026-10-23. Quartiles stay for sampling and as a sensitivity check. Adopted at F0, frozen at F1 in `terciles.json`. |
-| Reporting | Values with p-values for Spearman ρ and Pearson r, as in the pilot. Paired condition contrasts are reported with 95% puzzle-bootstrap intervals, stratified by quartile. |
+| Reporting | Values with p-values, without resampling. Spearman ρ and Pearson r carry their t-test p-values as in the pilot, paired condition contrasts use the Wilcoxon signed-rank test over puzzles, and the persona checks use rank tests over games (Section 7). Decided on 2 November 2026, replacing the bootstrap intervals of the draft. |
 | Budget | About $55 including retries and smoke tests. Stop and review above $70 (Section 6.3). Adopted at F0. |
 | Pooling | None. The new code makes this a new configuration, so no pilot game counts toward the final study (README reuse rule 3). |
 
@@ -74,7 +74,7 @@ How the baselines enter each question:
 |---|---|
 | RQ1 | Reference values in the same table: within-puzzle SD and ICC for each condition. |
 | RQ2 | Main use. ρ, bias and MAE for each condition, plus the two paired contrasts (Section 7) to show whether C1 agrees with humans better than either baseline. |
-| RQ3 | C3 is the baseline of the persona check. The personas count as working only if C1's Cautious − Bold gap exceeds the largest gap between C3's neutral advisors. |
+| RQ3 | C3 is the baseline of the persona check. The personas count as working only if Cautious and Bold differ in C1 and the neutral advisors do not differ in C3 (Section 7). |
 
 ## 4. Puzzles
 
@@ -168,15 +168,16 @@ A new `experiment/analysis_final.py` reads the three experiment directories, reu
 
 | RQ | Measures |
 |---|---|
-| RQ1 | Within-puzzle SD, ICC(1,1) and ICC(1,10) |
+| RQ1 | Within-puzzle SD, ICC(1,1) and ICC(1,10), each ICC with its F-distribution 95% interval |
 | RQ2 | Spearman ρ with p-value (primary), Pearson r with p-value, bias and MAE with the constant-guess baseline, rank-based terciles (exact and adjacent, quadratic-weighted κ) |
-| RQ3 (C1, C3) | GM retention, adoption and agreement per advisor, non-candidate share per advisor after turn 1, the largest gap between advisors with a game-level bootstrap interval |
+| RQ3 (C1, C3) | GM retention, adoption and agreement per advisor, non-candidate share per advisor after turn 1, and the two persona tests below |
 
 **Baseline contrasts (inside RQ1 to RQ3).** For the debate effect (C3 − C2) and the persona effect (C1 − C3):
 
-- Paired differences in MAE, bias and within-puzzle SD, with 95% puzzle-bootstrap intervals stratified by quartile. Holm correction over the two contrasts.
-- ρ for each condition against zero, plus the ρ difference with its bootstrap interval as a descriptive result.
-- For the persona effect, the Cautious − Bold non-candidate gap in C1 against the largest gap between the neutral advisors in C3. The personas count as working only if C1's gap exceeds C3's.
+- Paired per-puzzle differences in absolute error (for MAE), signed error (for bias) and within-puzzle SD, each tested with the two-sided Wilcoxon signed-rank test over the 100 puzzles. The mean difference is reported as the effect size. Holm correction over the two contrasts, per measure.
+- ρ for each condition against zero with its p-value. The ρ difference between conditions is reported as a value only, since a test of it would need several hundred puzzles (Section 5).
+- For the persona effect, each advisor gets a non-candidate share per game (suggestions after turn 1). In C1, `cautious_vs_bold` is a Wilcoxon signed-rank test on the per-game Cautious − Bold differences. In C3, `advisor_difference` is a Friedman test across the three neutral advisors. The personas count as working only if the C1 test is significant with Cautious above Bold and the C3 test is not. Both use games as the unit, so turns in one game are never counted as independent. Implemented at F5 in `persona_stats.py` and `nonparametric.py` (stdlib, normal and chi-square approximations with tie corrections, checked against scipy).
+- Limitation: the game-level tests treat the 1,000 games of a condition as independent, although each puzzle is played 10 times.
 
 **Sensitivity checks.** Quartiles instead of terciles, missing games scored as losses, the 7-bin distribution pooled by tercile, and the cost and reliability of each condition (tokens, seconds, calls, repairs and failures per game).
 
@@ -191,8 +192,8 @@ A new `experiment/analysis_final.py` reads the three experiment directories, reu
 | **F2** Manifests | Select the final and smoke puzzles | Extend the manifest tool with a single stratified draw (25 per quartile, seed `20261103`) that excludes all pilot manifests. Write the 8-puzzle smoke manifest from the pilot-02 wide manifest. | `final.csv` (100 rows) and `final-smoke.csv` (8 rows) exist, and tests confirm no overlap with any pilot manifest and identical output on a re-run. | offline | S |
 | **F3** Single-agent mode | Support C2 | Allow a line-up without advisors, in which one decision per turn is validated and played. Add the `solo_player` persona and its preset. | Scripted tests cover a full solo game, its repair path and its call count (one call per turn without repairs). | offline | M |
 | **F4** Neutral preset | Support C3 | Add `neutral_advisor` under three keys and a preset that pairs them with the neutral GM. | The preset builds three advisors with identical instructions, and the pilot-02 registry text is unchanged (`personas_test`). | offline | S |
-| **F5** Statistics for all conditions | Log comparable turn statistics | Make `turn_statistics` and `persona_stats` work without advisors (C2) and with neutral keys (C3). Add the largest-gap statistic between advisors. | Scripted tests cover all three conditions, and a test confirms the answer word never appears in any prompt in any condition. | offline | M |
-| **F6** Final analysis | Per-condition metrics and paired contrasts | Add `analysis_final.py` (Section 7), terciles and the Holm-corrected contrasts. | Tests on synthetic runs reproduce known values, and the module writes `metrics.json`, `condition_summary.csv`, `contrasts.csv` and `persona_stats.csv`. | offline | M |
+| **F5** Statistics for all conditions | Log comparable turn statistics | Make `turn_statistics` and `persona_stats` work without advisors (C2) and with neutral keys (C3). Add the per-game persona tests (Wilcoxon for Cautious − Bold, Friedman across advisors). | Scripted tests cover all three conditions, and a test confirms the answer word never appears in any prompt in any condition. | offline | M |
+| **F6** Final analysis | Per-condition metrics and paired contrasts | Add `analysis_final.py` (Section 7), terciles, the ICC F-intervals and the Holm-corrected Wilcoxon contrasts. | Tests on synthetic runs reproduce known values, and the module writes `metrics.json`, `condition_summary.csv`, `contrasts.csv` and `persona_stats.csv`. | offline | M |
 | **F7** Smoke tests | Measure C2 and C3 before freezing | Play the smoke manifest × 2 games in each condition (48 games, under $1). Read one transcript per condition. | At least 15 of 16 games complete per condition, the neutral advisors argue without playstyles, and the measured cost per game replaces the estimates in Section 6.3. | live (tiny) | S |
 | **F8** Freeze | Lock the final configuration | Record the model, snapshot, settings, personas, prompts, hashes and code revision in Section 6.1. Tag `final-frozen`. | The tag exists, and nothing in Sections 1, 2 or 6 changes after it. | offline | S |
 | **F9** Run | Collect the 3,000 games | Interleaved chunks of C1, C3 and C2 (Section 6.2). | 100 × 10 completed games per condition, or failures documented. | live (~28 h) | L |

@@ -608,7 +608,8 @@ class TurnStatisticsTests(unittest.TestCase):
     # RAISE against CIGAR scores YYYBB, which leaves CIGAR and VIRAL.
     VOCABULARY = {"CIGAR", "CRANE", "RAISE", "SLATE", "VIRAL"}
 
-    def play(self, backend, *, max_rounds: int = 1, max_attempts: int = 1) -> RunLog:
+    def play(self, backend, *, max_rounds: int = 1, max_attempts: int = 1,
+             preset: str = "pilot-02") -> RunLog:
         game = WordleGame(
             WordlePuzzle("0", "CIGAR"),
             allowed_guesses=self.VOCABULARY,
@@ -618,7 +619,7 @@ class TurnStatisticsTests(unittest.TestCase):
             return play_wordle_game(
                 game=game,
                 bridge=WordleBridge(game),
-                lineup=create_lineup(backend, preset="pilot-02"),
+                lineup=create_lineup(backend, preset=preset),
                 run=RunLog(metadata={}, path=Path(directory) / "run.json"),
                 max_rounds=max_rounds,
                 max_repairs=1,
@@ -732,6 +733,58 @@ class TurnStatisticsTests(unittest.TestCase):
         for system, payload in backend.calls:
             prompt = (system + json.dumps(payload)).upper()
             self.assertNotIn("CIGAR", prompt)
+
+    def test_answer_never_appears_in_any_prompt_in_any_condition(self):
+        # C1 pilot-02, C2 solo, C3 neutral. Every call of a turn returns the
+        # turn's word; the GM review stops, so each debate has one round.
+        for preset, calls_per_turn in (("pilot-02", 5), ("solo", 1), ("neutral", 5)):
+            with self.subTest(preset=preset):
+                script = [completion("RAISE", index == calls_per_turn - 1) for index in range(calls_per_turn)]
+                script += [completion("VIRAL", index == calls_per_turn - 1) for index in range(calls_per_turn)]
+                if preset == "solo":
+                    script = [completion("RAISE", False), completion("VIRAL", False)]
+                backend = RecordingSequenceBackend(script)
+                run = self.play(backend, max_attempts=2, preset=preset)
+
+                self.assertEqual(run.data["status"], "completed")
+                self.assertEqual(len(backend.calls), 2 * calls_per_turn)
+                self.assertIn("YYYBB", json.dumps(backend.calls[calls_per_turn][1]))
+                for system, payload in backend.calls:
+                    self.assertNotIn("CIGAR", (system + json.dumps(payload)).upper())
+
+    def test_solo_turn_statistics(self):
+        backend = SequenceBackend([completion("RAISE", False), completion("CRANE", False)])
+        run = self.play(backend, max_attempts=2, preset="solo")
+        first, second = run.data["turns"]
+
+        self.assertEqual(first["initial_proposal"], "RAISE")
+        self.assertTrue(first["gm_retained"])
+        self.assertEqual(first["advisor_suggestions"], [])
+        self.assertEqual(first["adopted_from"], [])
+        self.assertEqual(first["advisor_agreed"], {})
+        self.assertEqual(first["candidates_remaining"], 5)
+        # CRANE does not fit RAISE = YYYBB, so the player left the candidates.
+        self.assertEqual(second["is_candidate"], {"initial_proposal": False, "final_action": False})
+        self.assertEqual(second["candidates_remaining"], 2)
+
+    def test_neutral_turn_statistics(self):
+        backend = SequenceBackend([
+            completion("RAISE", False),
+            completion("SLATE", False),
+            completion("RAISE", False),
+            completion("SLATE", False),
+            completion("SLATE", True),
+        ])
+        turn = self.play(backend, preset="neutral").data["turns"][0]
+
+        self.assertEqual(
+            [(s["advisor"], s["action"], s["agreed"]) for s in turn["advisor_suggestions"]],
+            [("neutral_1", "SLATE", False), ("neutral_2", "RAISE", True), ("neutral_3", "SLATE", False)],
+        )
+        self.assertEqual(turn["advisor_agreed"],
+                         {"neutral_1": False, "neutral_2": True, "neutral_3": False})
+        self.assertEqual(turn["adopted_from"], ["neutral_1", "neutral_3"])
+        self.assertFalse(turn["gm_retained"])
 
 
 if __name__ == "__main__":

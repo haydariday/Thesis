@@ -3,9 +3,20 @@
 Reads the per-turn fields that ``play.turn_statistics`` writes
 (``gm_retained``, ``adopted_from``, ``advisor_agreed``,
 ``advisor_suggestions`` with ``is_candidate``) from completed runs only.
-Everything here is descriptive.  The one interval estimate is the
-manipulation check, the Cautious minus Bold non-candidate share, with a
-bootstrap over games because turns within a game are not independent.
+Everything here is descriptive except two kinds of check, which use games
+as the unit because turns within a game are not independent.  The pilot's
+manipulation check is the Cautious minus Bold non-candidate share with a
+bootstrap over games.  The final study tests instead of resampling
+(:mod:`nonparametric`): each advisor gets a non-candidate share per game,
+``cautious_vs_bold`` is a Wilcoxon signed-rank test on the per-game
+differences, and ``advisor_difference`` is a Friedman test across all
+advisors.  In a debate without personas (C3) the Friedman test is the
+baseline of the persona check: advisors with one shared instruction should
+not differ.
+
+A single-agent game (C2) has no advisors.  Its GM fields are then trivially
+true (the player always "retains" its own word), so retention is reported as
+None rather than 1.
 """
 
 from __future__ import annotations
@@ -19,6 +30,7 @@ from pathlib import Path
 from typing import Any
 
 from .analysis import CI_HIGH_FRACTION, CI_LOW_FRACTION, _normalise_puzzle_id, _percentile
+from .nonparametric import friedman, wilcoxon_signed_rank
 
 
 @dataclass(frozen=True)
@@ -116,6 +128,51 @@ def gap_bootstrap(
     }
 
 
+def game_share(game: Game, advisor: str) -> float | None:
+    """One advisor's non-candidate share after turn 1 in one game, or None."""
+
+    bad, total = non_candidate_counts([game], advisor)
+    return bad / total if total else None
+
+
+def paired_game_shares(
+    games: Sequence[Game],
+    advisors: Sequence[str],
+) -> list[list[float]]:
+    """Per-game shares, one value per advisor, for games where all have one."""
+
+    rows = []
+    for game in games:
+        row = [game_share(game, key) for key in advisors]
+        if all(value is not None for value in row):
+            rows.append([value for value in row if value is not None])
+    return rows
+
+
+def cautious_vs_bold(games: Sequence[Game], higher: str = "cautious", lower: str = "bold") -> dict[str, Any]:
+    """Wilcoxon signed-rank test on per-game ``higher`` minus ``lower`` shares."""
+
+    rows = paired_game_shares(games, (higher, lower))
+    return {
+        "difference": f"{higher} minus {lower}",
+        "unit": "game",
+        **wilcoxon_signed_rank([a - b for a, b in rows]),
+    }
+
+
+def advisor_difference(games: Sequence[Game], advisors: Sequence[str]) -> dict[str, Any] | None:
+    """Friedman test that all advisors share one per-game non-candidate share."""
+
+    if len(advisors) < 2:
+        return None
+    rows = paired_game_shares(games, advisors)
+    shares = {
+        key: sum(row[j] for row in rows) / len(rows) if rows else None
+        for j, key in enumerate(advisors)
+    }
+    return {"unit": "game", "mean_shares": shares, **friedman(rows, advisors)}
+
+
 def persona_statistics(
     games: Sequence[Game],
     seed: int,
@@ -149,6 +206,7 @@ def persona_statistics(
             "non_candidate_share": _share(bad, total),
         }
 
+    solo = not advisors
     retained = sum(bool(turn.get("gm_retained")) for turn in turns)
     final_bad = sum(not (turn.get("is_candidate") or {}).get("final_action", True) for turn in later)
     initial_bad = sum(not (turn.get("is_candidate") or {}).get("initial_proposal", True) for turn in later)
@@ -156,8 +214,9 @@ def persona_statistics(
     return {
         "games": len(games),
         "turns": len(turns),
-        "gm_retained": retained,
-        "gm_retention_rate": _share(retained, len(turns)),
+        "solo": solo,
+        "gm_retained": None if solo else retained,
+        "gm_retention_rate": None if solo else _share(retained, len(turns)),
         "termination": dict(sorted(terminations.items())),
         "mean_debate_rounds": (
             sum(int(turn.get("debate_rounds") or 0) for turn in turns) / len(turns)
@@ -173,6 +232,10 @@ def persona_statistics(
             if {"cautious", "bold"} <= set(advisors)
             else None
         ),
+        "cautious_vs_bold": (
+            cautious_vs_bold(games) if {"cautious", "bold"} <= set(advisors) else None
+        ),
+        "advisor_difference": advisor_difference(games, advisors),
     }
 
 
