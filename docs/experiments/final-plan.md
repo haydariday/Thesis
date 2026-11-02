@@ -157,8 +157,8 @@ Prices are DeepSeek's off-peak rates per 1M tokens ($0.003 cache hit, $0.15 cach
 |---|---|---|---|---|
 | C1 persona debate | 1,000 | about $20 | measured at F7 ($0.0196 per game) | about 14 h |
 | C2 single agent | 1,000 | about $2 | measured at F7 ($0.0016 per game) | about 1.5 h |
-| C3 debate without personas | 1,000 | about $21 | measured at F7 ($0.0209 per game) | about 16 h |
-| **Total** | **3,000** | **about $43** | | **about 31 h** (about half with 8 workers) |
+| C3 debate without personas | 1,000 | about $22 | measured at F7 with the revised prompt ($0.0218 per game) | about 16 h |
+| **Total** | **3,000** | **about $44** | | **about 31 h** (about half with 8 workers) |
 
 The draft estimates were $21, $4 and $21 (C1 from the 532 vB attempts, C2 and C3 assumed). F7 replaced them with the smoke measurements below.
 
@@ -186,7 +186,22 @@ Smoke manifest × 2 games per condition, frozen settings of Section 6.1 with `--
 - **Herding in C3.** When a later neutral advisor disagrees with the GM, it nearly always repeats the earlier advisor's alternative (neutral_2 17 of 20, neutral_3 21 of 23). Cautious almost never does (1 of 99), Casual sometimes (9 of 43). The fixed speaking order therefore shapes C3 more than C1 (see Section 9).
 - `analysis_final` ran on the three smoke directories without errors. With 8 puzzles its values are not results.
 
-Open before F8 (Section 9): whether to raise `max_tokens` for every condition because of C3's truncations, and whether to add a herding statistic.
+**C3 rerun with the revised neutral prompt** (`runs/final-smoke-c3b`, code revision `00cd914`, Section 2.2):
+
+| | C3 first draft | C3 revised |
+|---|---|---|
+| Completed / wins | 16 / 16 | 16 / 16 |
+| Mean score | 3.88 | 3.75 |
+| Truncated replies | 38 of 526 (7.2%) | 15 of 600 (2.5%) |
+| Advisor abstentions | 2 | 0 |
+| Agreement with the GM (neutral_1 / 2 / 3) | 82% / 81% / 79% | 87% / 83% / 82% |
+| Later dissent repeats an earlier one | 38 of 43 | 36 of 46 |
+| Turns ending at the round cap | 4 of 62 | 15 of 60 |
+| Calls / cost per game | 32.9 / $0.0209 | 37.5 / $0.0218 |
+
+The revision cut truncations to about a third and removed the abstentions, so `max_tokens` stays at 4096 for all conditions. Herding is unchanged. The GM now runs more rounds, so the cost per game stays about the same. The revised prompt is the C3 configuration for F8.
+
+Open before F8 (Section 9): whether to add a herding statistic.
 
 ## 7. Analysis
 
@@ -245,7 +260,6 @@ uv run python -m multi_agent_testing.experiment.analysis_final \
 
 ## 9. Open questions for the supervisor
 - Advisors speak in a fixed order and see the earlier advice of the same round, as in the pilot. F7 shows strong herding in C3, so the persona contrast (C1 − C3) partly measures resistance to herding. Report as a limitation, or add an order or blind-advisor ablation?
-- Raise `max_tokens` from 4096 for all three conditions? 7% of C3's calls (15% of neutral_1's) were cut off at the limit, against under 1% in C1. Raising it departs from the vB setting.
 
 - RQ3 in the thesis (expert evaluation) against persona behavior here, and whether C2 and C3 as baselines inside RQ1 to RQ3 are enough without a separate comparison question.
 - Whether terciles replace quartiles as the category scheme of the final study.
