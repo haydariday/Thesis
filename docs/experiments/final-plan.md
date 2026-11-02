@@ -103,7 +103,9 @@ Power of Spearman ρ against zero (α = 0.05, 2,000 simulated studies per cell, 
 - **Ten runs are enough per puzzle.** By the Spearman–Brown relation, the reliability of a puzzle mean is about 0.77 to 0.89 at 10 runs and only 0.91 to 0.96 at 32. Adding subjects improves a reliability study more than adding repeats once each subject has a few [Walter, Eliasziw and Donner 1998].
 - **RQ1 needs no deep set.** At 100 × 10 the simulated 95% range of ICC(1,1) is about ±0.07 to 0.08, and 100 puzzles exceed the 30 subjects recommended for an ICC study [Koo and Li 2016].
 - **Condition contrasts rest on paired measures.** The simulated MAE is precise to about ±0.07 to 0.08, so paired MAE and bias differences of about 0.15 guesses are detectable. A difference between two correlations would need several hundred puzzles, so ρ is tested against zero per condition and its differences are reported descriptively.
-- **Limits.** Exact category matches stay at about 0.35 to 0.43 in every design, because the system's scores tie. The 7-bin distribution comparison is pooled by category, since 10 runs give each bin share a margin of about ±36 points [Thompson 1987].
+- **Limits.** Exact category matches stay low in every design, because the system's scores tie: about 0.35 to 0.43 with quartiles and 0.46 to 0.53 with terciles (chance is 0.25 and 0.33). The 7-bin distribution comparison is pooled by category, since 10 runs give each bin share a margin of about ±36 points [Thompson 1987].
+
+- **Tercile stratification (rerun on 2 November 2026, mode `terciles`).** Drawing 33/33/34 per tercile instead of 25 per quartile leaves the power, ρ, ICC(1,1) and MAE unchanged at 100 × 10 (for example power 91–95% at a true ρ of 0.4, and ICC(1,1) 0.21 or 0.36 depending on the between-puzzle spread). Only the exact category rate rises, because there are three categories instead of four.
 
 The references in this section were cited from memory and must be checked before they enter the thesis: Walter, Eliasziw and Donner (*Statistics in Medicine*, 1998), Bonett and Wright (*Psychometrika*, 2000) for correlation sample sizes, Koo and Li (*Journal of Chiropractic Medicine*, 2016).
 

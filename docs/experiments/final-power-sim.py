@@ -2,13 +2,18 @@
 
 Draws stratified puzzles from the real human means, generates whole-number guess counts with the pilot's
 configuration-vB noise (within SD about 0.6 before rounding, bias -0.55) and reports, per design, the power of
-Spearman's rho against zero and the 95% range of rho, ICC(1,1), MAE and the rank-quartile exact rate.
+Spearman's rho against zero and the 95% range of rho, ICC(1,1), MAE and the rank-category exact rate.
+
+Mode ``run`` draws 25 per quartile and scores rank quartiles (the draft design). Mode ``terciles`` draws
+33/33/34 per tercile (cuts 4.07 and 4.42, final.csv since 2 November 2026) and scores rank terciles.
 
 Needs numpy and scipy, which are not project dependencies:
     uv run --with numpy --with scipy python docs/experiments/final-power-sim.py \
         src/data/processed/wordle_human_clean.csv check   # reproduce the pilot sizes (48x3, 12x32)
     uv run --with numpy --with scipy python docs/experiments/final-power-sim.py \
         src/data/processed/wordle_human_clean.csv run     # candidate designs
+    uv run --with numpy --with scipy python docs/experiments/final-power-sim.py \
+        src/data/processed/wordle_human_clean.csv terciles  # the tercile-stratified final design
 """
 import csv, sys
 import numpy as np
@@ -18,6 +23,8 @@ rng = np.random.default_rng(20261102)
 H = [(float(r["human_mean_score"]), r["quartile"]) for r in csv.DictReader(open(sys.argv[1])) if r["eligible"] == "True"]
 byq = {q: np.array([h for h, qq in H if qq == q]) for q in ("D1", "D2", "D3", "D4")}
 cuts = [3.98, 4.24, 4.53]
+tercile_cuts = [4.07, 4.42]
+byt = {t: np.array([h for h, _ in H if np.digitize(h, tercile_cuts) == i]) for i, t in enumerate(("T1", "T2", "T3"))}
 
 def icc11(x):
     n, k = x.shape
@@ -26,10 +33,14 @@ def icc11(x):
     msw = ((x - x.mean(1, keepdims=True)) ** 2).sum() / (n * (k - 1))
     return (msb - msw) / (msb + (k - 1) * msw)
 
-def sim(n, k, rho, sigma_b, sigma_w=0.60, bias=-0.55, reps=2000):
+def sim(n, k, rho, sigma_b, sigma_w=0.60, bias=-0.55, reps=2000, strata="quartile"):
     out = {"rho": [], "p": [], "icc": [], "mae": [], "rqx": []}
     for _ in range(reps):
-        h = np.concatenate([rng.choice(byq[q], n // 4, replace=False) for q in byq])
+        if strata == "tercile":
+            sizes = (n // 3, n // 3, n - 2 * (n // 3))  # 33/33/34 at n = 100
+            h = np.concatenate([rng.choice(byt[t], size, replace=False) for t, size in zip(byt, sizes)])
+        else:
+            h = np.concatenate([rng.choice(byq[q], n // 4, replace=False) for q in byq])
         hz = (h - h.mean()) / h.std()
         true = h.mean() + bias + sigma_b * (rho * hz + np.sqrt(1 - rho ** 2) * rng.standard_normal(n))
         runs = np.clip(np.rint(true[:, None] + sigma_w * rng.standard_normal((n, k))), 1, 7)
@@ -37,11 +48,16 @@ def sim(n, k, rho, sigma_b, sigma_w=0.60, bias=-0.55, reps=2000):
         r, p = stats.spearmanr(m, h)
         out["rho"].append(r); out["p"].append(p); out["icc"].append(icc11(runs))
         out["mae"].append(np.abs(m - h).mean())
-        hq = np.digitize(h, cuts); sq = np.digitize(stats.rankdata(m, method="ordinal"), np.quantile(np.arange(1, n + 1), [.25, .5, .75]))
+        if strata == "tercile":
+            hq = np.digitize(h, tercile_cuts)
+            sq = np.digitize(stats.rankdata(m, method="ordinal"), np.quantile(np.arange(1, n + 1), [1 / 3, 2 / 3]))
+        else:
+            hq = np.digitize(h, cuts)
+            sq = np.digitize(stats.rankdata(m, method="ordinal"), np.quantile(np.arange(1, n + 1), [.25, .5, .75]))
         out["rqx"].append((hq == sq).mean())
     o = {k: np.array(v) for k, v in out.items()}
     q = lambda a: f"{np.median(a):.2f} [{np.quantile(a, .025):.2f}, {np.quantile(a, .975):.2f}]"
-    return f"power {np.mean(o['p'] < .05):.0%} | rho {q(o['rho'])} | ICC11 {q(o['icc'])} | MAE {q(o['mae'])} | rankQ exact {q(o['rqx'])}"
+    return f"power {np.mean(o['p'] < .05):.0%} | rho {q(o['rho'])} | ICC11 {q(o['icc'])} | MAE {q(o['mae'])} | rank-category exact {q(o['rqx'])}"
 
 if sys.argv[2] == "check":
     # Does the model reproduce the pilot? (vB wide 48x3: rho .28, ICC .25; vB deep 12x32: rho .66, ICC .44)
@@ -49,6 +65,12 @@ if sys.argv[2] == "check":
         for rho in (0.4, 0.5, 0.6):
             print(f"sb={sb} rho={rho}  48x3:", sim(48, 3, rho, sb, reps=1000))
             print(f"               12x32:", sim(12, 32, rho, sb, reps=1000))
+elif sys.argv[2] == "terciles":
+    for sb in (0.35, 0.5):
+        for rho in (0.4, 0.5, 0.6):
+            print(f"\n== sigma_b={sb}, true rho={rho}")
+            print("  100 x 10 quartiles", sim(100, 10, rho, sb))
+            print("  100 x 10 terciles ", sim(100, 10, rho, sb, strata="tercile"))
 else:
     for sb in (0.35, 0.5):
         for rho in (0.4, 0.5, 0.6):
