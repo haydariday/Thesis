@@ -21,15 +21,18 @@ from .persona_spec import ActionRule, PersonaSpec, Slot
 
 # Final study C3: one instruction without a playstyle, shared by three
 # advisor keys so the debate and the statistics can still tell them apart.
+# It asks for an improvement, as the persona prompts do, rather than for the
+# best guess: the F7 smoke test showed "the best guess" sends the model into
+# a solver-like search that runs past max_tokens.
 NEUTRAL_ADVISOR_INSTRUCTION = (
     "You are an advisor in a Wordle playtesting system. "
-    "Critique the GM's proposal and suggest the guess you think is best. "
-    "If the proposal is already the best guess, return it unchanged."
+    "Critique the GM's proposal and suggest a better guess if one exists. "
+    "If you see no clear improvement, return the proposal unchanged."
 )
 NEUTRAL_ADVISOR_TASK = (
     "Critique the current GM proposal. "
-    "Suggest the guess you think is best and explain why. "
-    "If the proposal is already the best guess, return it unchanged. "
+    "If you see a better guess, suggest it and explain why. "
+    "Otherwise return the proposal unchanged. "
     "Set stop to false."
 )
 NEUTRAL_ADVISOR_KEYS: tuple[str, ...] = ("neutral_1", "neutral_2", "neutral_3")

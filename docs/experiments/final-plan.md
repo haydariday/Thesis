@@ -52,9 +52,11 @@ C3 keeps the GM and the three advisor slots of C1. The three advisors share one 
 
 Instruction draft (`neutral_advisor`, frozen at F8):
 
-> You are an advisor in a Wordle playtesting system. Critique the GM's proposal and suggest the guess you think is best. If the proposal is already the best guess, return it unchanged.
+> You are an advisor in a Wordle playtesting system. Critique the GM's proposal and suggest a better guess if one exists. If you see no clear improvement, return the proposal unchanged.
 
-Task draft: "Critique the current GM proposal. Suggest the guess you think is best and explain why. If the proposal is already the best guess, return it unchanged. Set stop to false."
+Task draft: "Critique the current GM proposal. If you see a better guess, suggest it and explain why. Otherwise return the proposal unchanged. Set stop to false."
+
+Revised after the first F7 smoke test. The first draft asked for "the guess you think is best", and 37 of C3's 38 truncated replies were empty: the model spent all 4096 tokens searching for an optimum. The revision asks for an improvement, with the same structure as the persona prompts and without a playstyle. Its smoke test is `runs/final-smoke-c3b`.
 
 The pilot-02 persona text stays byte-identical, since `resume` refuses a changed registry and C1 must match the persona design reported in Chapter 3.
 

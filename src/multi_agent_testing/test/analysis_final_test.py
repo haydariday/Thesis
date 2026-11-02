@@ -217,6 +217,12 @@ class EndToEndTest(unittest.TestCase):
             contextlib.redirect_stdout(io.StringIO()),
         ):
             runner.main()
+        # The test may run from a dirty working tree; the analysis refuses
+        # dirty runs, so mark these scripted runs as clean.
+        config_path = directory / "experiment_config.json"
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+        config["code_dirty"] = False
+        config_path.write_text(json.dumps(config), encoding="utf-8")
 
     def test_three_conditions(self):
         with tempfile.TemporaryDirectory() as tmp:

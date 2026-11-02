@@ -1,0 +1,71 @@
+Thesis Title:
+Persona-Based Multi-Agent LLM Debate as an Automated Playtester: Validating Game Difficulty Data Against Human Performance Baselines
+
+================================================================================
+5 CRITICAL EXAMINER QUESTIONS FOR CHAPTERS 3-5
+================================================================================
+
+1. CHAPTER 3 (Methodology - Ablation & Confounds)
+Question:
+"How do you know any improvement over a single agent comes from the playstyle personas rather than simply spending more compute and tokens per turn?"
+
+Why examiners ask it:
+In C1 (Persona Debate), each turn uses up to 3 rounds of proposals, 3 advisor critiques, and GM reviews (~43 LLM calls per game), whereas C2 (Single Agent) makes 1 call per turn. Comparing only C1 against C2 confounds persona diversity with test-time compute / multi-agent deliberation.
+
+How the study answers it:
+Section 2 of docs/experiments/final-plan.md introduces C3 (Debate without personas) using neutral_advisor (neutral_1, neutral_2, neutral_3). C3 keeps the exact same graph topology (sequential.py), turn structure, and call budget as C1, isolating the debate effect (C3 - C2) from the persona effect (C1 - C3).
+
+--------------------------------------------------------------------------------
+
+2. CHAPTER 3 & 4 (Methodology & Results - Persona Validity)
+Question:
+"Are the Bold, Cautious, and Casual personas genuinely behaving differently, or are they just role-playing labels on the same underlying LLM?"
+
+Why examiners ask it:
+Prompted personas often collapse into uniform behavior, or the Game Master simply ignores advisors and retains its initial proposal every turn.
+
+How the study answers it:
+- Behavioral manipulation check (persona_stats.py): Measures each advisor's post-Turn-1 non-candidate share (how often an advisor suggests an exploratory word already ruled out by public feedback). Personas only count as working if cautious_vs_bold (Wilcoxon signed-rank test) is significant in C1 AND advisor_difference (Friedman test across the three neutral advisors) is NOT significant in C3.
+- Influence check: Logs gm_retention_rate, adopted_from, and advisor_agreed in turn_statistics (play.py) to show how often advisor critiques actually change the GM's final action.
+
+--------------------------------------------------------------------------------
+
+3. CHAPTER 4 (Results - Metric Contradictions)
+Question:
+"Why does a naive constant predictor (guessing 4.28 for every puzzle) beat your system on MAE, and if your system has a systematic bias, how can you claim it validates game difficulty?"
+
+Why examiners ask it:
+In human Wordle data, puzzle means cluster tightly around 4.28 (IQR ~ 0.55). Predicting 4.28 for every puzzle yields an MAE of ~0.28, whereas LLM playtesters have a positive or negative signed error (bias) that inflates raw MAE and pushes value-based category cut-points into a single bucket.
+
+How the study answers it:
+- Game designers need a playtester to order puzzles from easiest to hardest (relative difficulty) and flag outliers, not necessarily match the exact human mean without calibration.
+- Section 7 of final-plan.md separates ranking alignment (Spearman rho, Pearson r, and rank-based terciles via rank_split) from level calibration (bias and MAE), while always reporting the constant baseline alongside MAE.
+
+--------------------------------------------------------------------------------
+
+4. CHAPTER 4 (Results - RQ1 vs. RQ2 Trade-off)
+Question:
+"Can high consistency (RQ1) actually be a bad sign for human alignment (RQ2)?"
+
+Why examiners ask it:
+If a system is completely deterministic (SD = 0 across all 10 repetitions of a puzzle), it can only produce discrete scores (1, 2, ..., 7), creating massive ties that cap category agreement and fail to reflect the distribution of human players (where the same puzzle is solved in 3 guesses by some players and 5 by others). Conversely, if a system always loses (score 7), it has perfect consistency (SD = 0) and zero playtesting utility.
+
+How the study answers it:
+- In RQ1, within-puzzle SD is paired with ICC(1,1) and ICC(1,10): the goal is for variance between puzzles to dominate variance within puzzles (ICC(1,10) ~ 0.77-0.89 at 10 runs), rather than zero variance overall.
+- The study also evaluates the 7-bin guess distribution (p1..p7 via Wasserstein W1, JSD, TVD in distribution.py) pooled by tercile to test whether repeated runs capture human spread.
+
+--------------------------------------------------------------------------------
+
+5. CHAPTER 5 (Discussion, Limitations & Threats to Validity)
+Question:
+"Given that the persona debate costs ~5x more tokens and time than a single agent ($21 vs. $4 per 1,000 games) and is tested only on Wordle with one model, when is this architecture actually justified?"
+
+Why examiners ask it:
+Chapter 5 must defend both practical utility (is the extra cost/latency of C1 over C2/C3 worth the gain in rho, MAE, or interpretable debate logs?) and threats to validity (internal and external).
+
+How the study answers it:
+- Cost-benefit trade-off (Section 6.3): If C1 outperforms C2/C3 on RQ2, the ~5x token cost ($0.021 per game off-peak) is still orders of magnitude cheaper than human playtesting; if C1 and C2 perform similarly on numeric scores, C1's value lies in qualitative design feedback (the debate rationales evaluated in the thesis's expert evaluation) rather than raw score prediction.
+- Explicit limitations:
+  1. Pre-training contamination: Historical NYT Wordle words and strategy discussions exist in LLM pre-training corpora (mitigated by strict answer secrecy in bridge.py, tested offline).
+  2. Single-game & single-model scope: Results are validated on Wordle (closed-vocabulary deduction) and deepseek-flash (configuration vB), not open-ended action/strategy games.
+  3. Game-independence assumption in RQ3 (Section 7): The game-level Wilcoxon (cautious_vs_bold) and Friedman (advisor_difference) persona checks collapse turns per game into one share, but treat the 1,000 games per condition as independent despite 10 repetitions per puzzle.
