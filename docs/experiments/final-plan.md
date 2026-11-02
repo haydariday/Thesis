@@ -153,12 +153,38 @@ Prices are DeepSeek's off-peak rates per 1M tokens ($0.003 cache hit, $0.15 cach
 
 | Condition | Games | Off-peak cost | Basis | Time with 4 workers |
 |---|---|---|---|---|
-| C1 persona debate | 1,000 | about $21 | measured vB usage | about 13 h |
-| C2 single agent | 1,000 | about $4 | estimate, measured at F7 | about 2–3 h |
-| C3 debate without personas | 1,000 | about $21 | assumed equal to C1, measured at F7 | about 13 h |
-| **Total** | **3,000** | **about $46** | | **about 28 h** |
+| C1 persona debate | 1,000 | about $20 | measured at F7 ($0.0196 per game) | about 14 h |
+| C2 single agent | 1,000 | about $2 | measured at F7 ($0.0016 per game) | about 1.5 h |
+| C3 debate without personas | 1,000 | about $21 | measured at F7 ($0.0209 per game) | about 16 h |
+| **Total** | **3,000** | **about $43** | | **about 31 h** (about half with 8 workers) |
+
+The draft estimates were $21, $4 and $21 (C1 from the 532 vB attempts, C2 and C3 assumed). F7 replaced them with the smoke measurements below.
 
 Budget about $55 including retries and smoke tests. Stop and review if the spend passes $70.
+
+### 6.4 Smoke test results (F7, 2 November 2026)
+
+Smoke manifest × 2 games per condition, frozen settings of Section 6.1 with `--workers 4`, code revision `4585702`, clean tree. The three conditions ran at the same time. Outputs are in `runs/final-smoke-c1`, `-c2` and `-c3`.
+
+| | C1 | C2 | C3 |
+|---|---|---|---|
+| Completed games | 16 / 16 | 16 / 16 | 16 / 16 |
+| Wins | 16 | 16 | 16 |
+| Mean score | 3.81 | 3.62 | 3.88 |
+| Calls per game | 38.6 | 3.7 | 32.9 |
+| Prompt / completion tokens per game | 36k (41% cached) / 27k | 1.9k (59% cached) / 2.4k | 29k (49% cached) / 31k |
+| Seconds per game | 208 | 19 | 225 |
+| Cost per game | $0.0196 | $0.0016 | $0.0209 |
+| Truncated replies (`max_tokens`) | 5 of 618 calls (all Cautious) | 1 of 59 | **38 of 526** (neutral_1 18, neutral_2 10, neutral_3 10) |
+| Advisor abstentions | 0 | – | 2 (neutral_1) |
+
+- One `system_fingerprint` (`bc19ba97…`) on all 1,203 calls. No rate-limit or backend errors with 12 games running at once.
+- C3's advisors argue without playstyles: no persona names, and their reasons use generic Wordle strategy ("information", "candidate").
+- Debate rounds in C1 match the vB pilot. C3's GM stops after one round more often (26 of 58 turns against 7 of 61 in C1).
+- **Herding in C3.** When a later neutral advisor disagrees with the GM, it nearly always repeats the earlier advisor's alternative (neutral_2 17 of 20, neutral_3 21 of 23). Cautious almost never does (1 of 99), Casual sometimes (9 of 43). The fixed speaking order therefore shapes C3 more than C1 (see Section 9).
+- `analysis_final` ran on the three smoke directories without errors. With 8 puzzles its values are not results.
+
+Open before F8 (Section 9): whether to raise `max_tokens` for every condition because of C3's truncations, and whether to add a herding statistic.
 
 ## 7. Analysis
 
@@ -216,6 +242,8 @@ uv run python -m multi_agent_testing.experiment.analysis_final \
 - **After the first chunk of each condition in F9:** check the fingerprints, the failure rate and the spend before continuing.
 
 ## 9. Open questions for the supervisor
+- Advisors speak in a fixed order and see the earlier advice of the same round, as in the pilot. F7 shows strong herding in C3, so the persona contrast (C1 − C3) partly measures resistance to herding. Report as a limitation, or add an order or blind-advisor ablation?
+- Raise `max_tokens` from 4096 for all three conditions? 7% of C3's calls (15% of neutral_1's) were cut off at the limit, against under 1% in C1. Raising it departs from the vB setting.
 
 - RQ3 in the thesis (expert evaluation) against persona behavior here, and whether C2 and C3 as baselines inside RQ1 to RQ3 are enough without a separate comparison question.
 - Whether terciles replace quartiles as the category scheme of the final study.
