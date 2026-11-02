@@ -2,6 +2,7 @@ import unittest
 from types import SimpleNamespace
 
 from ..agent.backend import (
+    ChatCompletionsBackend,
     Completion,
     completion_from_response,
     split_messages,
@@ -100,6 +101,76 @@ class CompletionFromResponseTests(unittest.TestCase):
         self.assertIsNone(completion.prompt_tokens)
         self.assertIsNone(completion.completion_tokens)
         self.assertIsNone(completion.total_tokens)
+
+
+
+class ChatRequestTests(unittest.TestCase):
+    """What the chat backend actually sends; no network calls."""
+
+    def sent(self, finish_reason: str = "stop", content: str | None = '{"action": "CRANE"}', **kwargs) -> dict:
+        backend = ChatCompletionsBackend(
+            model="m", base_url="https://example.invalid/v1", api_key="k", **kwargs
+        )
+        captured: dict = {}
+
+        def create(**request):
+            captured.update(request)
+            message = SimpleNamespace(content=content)
+            return SimpleNamespace(
+                choices=[SimpleNamespace(message=message, finish_reason=finish_reason)],
+                usage=SimpleNamespace(
+                    prompt_tokens=30,
+                    completion_tokens=19,
+                    total_tokens=49,
+                    prompt_cache_hit_tokens=24,
+                ),
+                model="m",
+                system_fingerprint="fp-1",
+            )
+
+        backend.client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))  # type: ignore[assignment]
+        self.completion = backend.complete([{"role": "user", "content": "hi"}])
+        return captured
+
+    def test_fingerprint_and_cache_hits_are_kept(self):
+        self.sent(temperature=0.2)
+
+        self.assertEqual(self.completion.system_fingerprint, "fp-1")
+        self.assertEqual(self.completion.cached_prompt_tokens, 24)
+
+    def test_temperature_is_sent(self):
+        request = self.sent(temperature=0.2)
+
+        self.assertEqual(request["temperature"], 0.2)
+        self.assertNotIn("extra_body", request)
+
+    def test_thinking_switch_goes_in_extra_body(self):
+        request = self.sent(temperature=0.2, extra_body={"thinking": {"type": "disabled"}})
+
+        self.assertEqual(request["extra_body"], {"thinking": {"type": "disabled"}})
+
+    def test_reply_cap_and_json_mode_are_sent(self):
+        request = self.sent(temperature=0.2, max_tokens=1024, json_mode=True)
+
+        self.assertEqual(request["max_tokens"], 1024)
+        self.assertEqual(request["response_format"], {"type": "json_object"})
+
+    def test_cut_off_and_empty_replies_return_with_usage(self):
+        self.sent(temperature=0.2, finish_reason="length", content='{"action": "CR')
+        self.assertEqual(self.completion.finish_reason, "length")
+        self.assertEqual(self.completion.completion_tokens, 19)
+
+        self.sent(temperature=0.2, content=None)
+        self.assertEqual(self.completion.text, "")
+
+    def test_other_abnormal_finishes_still_fail(self):
+        with self.assertRaises(RuntimeError):
+            self.sent(temperature=0.2, finish_reason="content_filter")
+
+    def test_omitted_temperature_is_not_sent(self):
+        request = self.sent(temperature=None, extra_body={"thinking": {"type": "enabled"}})
+
+        self.assertNotIn("temperature", request)
 
 
 if __name__ == "__main__":

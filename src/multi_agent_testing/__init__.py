@@ -1,25 +1,20 @@
-from .agent.personas import create_agents
-from .orchestra.debate import DebateState, create_debate_graph
+from .agent.personas import create_lineup
+from .orchestra.debate import create_debate_graph
+from .orchestra.debate_context import new_debate_state
 
 
 def main() -> None:
-    agents = create_agents()
-    graph = create_debate_graph(agents)
+    lineup = create_lineup(preset="pilot-01")
+    graph = create_debate_graph(lineup)
 
-    initial_state: DebateState = {
-        "context": (
+    initial_state = new_debate_state(
+        (
             "A new Wordle game has started. "
             "There are no previous guesses. "
             "Six attempts remain."
         ),
-        "proposal": "",
-        "alternative": "",
-        "transcript": [],
-        "final_action": "",
-        "round": 0,
-        "max_rounds": 1,
-        "stop": False,
-    }
+        max_rounds=1,
+    )
 
     result = graph.invoke(initial_state)
 

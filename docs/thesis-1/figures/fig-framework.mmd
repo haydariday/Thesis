@@ -1,0 +1,48 @@
+%%{init: {"flowchart": {"rankSpacing": 22, "nodeSpacing": 22}}}%%
+flowchart LR
+  subgraph GAME["Game environment"]
+    direction TB
+    ENV["<b>Wordle engine</b><br/>holds the hidden answer,<br/>returns G/Y/B feedback<br/>for every guess"]
+  end
+
+  subgraph BRIDGE["Bridge"]
+    direction TB
+    GSE["<b>Game state extraction</b><br/>reads the public history<br/>and renders it as JSON text<br/>with a letter summary"]
+    GSE ~~~ CA
+    CA["<b>Consensus action</b><br/>validates the final guess<br/>and executes it<br/>in the engine"]
+  end
+
+  subgraph DEB["LLM multi-agent debate"]
+    direction TB
+    GM["<b>Game Master</b><br/>proposes, reviews and<br/>decides the guess"]
+    subgraph ADV["Advisors, in fixed order"]
+      direction TB
+      BO["<b>Bold</b><br/>plays to win now"]
+      CAU["<b>Cautious</b><br/>plays not to lose"]
+      CAS["<b>Casual</b><br/>plays like a daily player"]
+      BO ~~~ CAU ~~~ CAS
+    end
+    GM <-- "proposal /<br/>suggestions" --> ADV
+  end
+
+  subgraph KNO["Game knowledge"]
+    direction TB
+    RUL["<b>Game rules</b><br/>goal, feedback colors,<br/>allowed actions"]
+    FMT["<b>Reply format</b><br/>one JSON object with<br/>action, reason, stop"]
+    PER["<b>Persona instructions</b><br/>the playstyle of<br/>each agent"]
+    RUL ~~~ FMT ~~~ PER
+  end
+
+  GAME <-- "public state /<br/>guess" --> BRIDGE
+  BRIDGE <-- "game state /<br/>final guess" --> DEB
+  DEB -. "given to<br/>every agent" .- KNO
+
+  classDef sys fill:#dbe9f6,stroke:#1f4e79,stroke-width:1.5px,color:#111
+  classDef ext fill:#f2f2f2,stroke:#7f7f7f,stroke-width:1px,color:#111
+  class GSE,CA,GM,BO,CAU,CAS,RUL,FMT,PER sys
+  class ENV ext
+  style GAME fill:#ffffff,stroke:#7f7f7f,stroke-dasharray:6 4
+  style BRIDGE fill:#f4f9fe,stroke:#1f4e79,stroke-width:2px
+  style DEB fill:#f4f9fe,stroke:#1f4e79,stroke-width:2px
+  style KNO fill:#f4f9fe,stroke:#1f4e79,stroke-width:2px
+  style ADV fill:#ffffff,stroke:#1f4e79,stroke-dasharray:4 3

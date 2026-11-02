@@ -17,6 +17,34 @@ class Completion:
     completion_tokens: int | None = None
     total_tokens: int | None = None
     model: str | None = None
+    # Backend build ID; it changes when the provider swaps the model silently.
+    system_fingerprint: str | None = None
+    # Prompt tokens served from the provider's cache (billed at a lower rate).
+    cached_prompt_tokens: int | None = None
+    # "stop" for a complete reply; "length" when max_tokens cut it off.
+    finish_reason: str | None = None
+
+
+class UnusableReply(ValueError):
+    """A reply that arrived but cannot be parsed; repaired like a bad decision."""
+
+
+class TruncatedReply(UnusableReply):
+    pass
+
+
+class EmptyReply(UnusableReply):
+    pass
+
+
+def cached_prompt_tokens(usage: Any) -> int | None:
+    """DeepSeek's cache-hit count, else the OpenAI-style cached token count."""
+
+    hits = getattr(usage, "prompt_cache_hit_tokens", None)
+    if hits is None:
+        details = getattr(usage, "prompt_tokens_details", None)
+        hits = getattr(details, "cached_tokens", None)
+    return hits
 
 
 class ModelBackend(Protocol):
@@ -49,10 +77,13 @@ class ChatCompletionsBackend:
         self,
         model: str,
         base_url: str,
-        temperature: float,
+        temperature: float | None,
         api_key: str,
         request_timeout: float = 90.0,
         api_retries: int = 0,
+        extra_body: dict[str, Any] | None = None,
+        max_tokens: int | None = None,
+        json_mode: bool = False,
     ) -> None:
         if not api_key.strip():
             raise ValueError("An API key or local placeholder is required.")
@@ -63,8 +94,14 @@ class ChatCompletionsBackend:
         if not 0 <= api_retries <= 2:
             raise ValueError("api_retries must be between 0 and 2.")
 
+        if max_tokens is not None and max_tokens < 1:
+            raise ValueError("max_tokens must be positive.")
+
         self.model = model
         self.temperature = temperature
+        self.extra_body = extra_body
+        self.max_tokens = max_tokens
+        self.json_mode = json_mode
 
         self.client = OpenAI(
             base_url=base_url,
@@ -73,33 +110,49 @@ class ChatCompletionsBackend:
             max_retries=api_retries,
         )
 
+    def _sampling(self) -> dict[str, Any]:
+        """Optional request fields; an omitted temperature is not sent."""
+
+        options: dict[str, Any] = {}
+        if self.temperature is not None:
+            options["temperature"] = self.temperature
+        if self.extra_body is not None:
+            options["extra_body"] = self.extra_body
+        if self.max_tokens is not None:
+            options["max_tokens"] = self.max_tokens
+        if self.json_mode:
+            options["response_format"] = {"type": "json_object"}
+        return options
+
     def complete(self, messages: Messages) -> Completion:
         response = self.client.chat.completions.create(
             model=self.model,
             messages=messages,
-            temperature=self.temperature,
+            **self._sampling(),
         )
 
         choice = response.choices[0]
         content = choice.message.content
 
-        if choice.finish_reason != "stop":
+        # A cut-off or empty reply still returns its usage; Agent.decide
+        # turns it into a repairable rejection.
+        if choice.finish_reason not in ("stop", "length"):
             raise RuntimeError(
                 f"Model response did not finish normally: "
                 f"{choice.finish_reason}"
             )
 
-        if content is None or not content.strip():
-            raise RuntimeError("The model returned an empty response.")
-
         usage = getattr(response, "usage", None)
 
         return Completion(
-            text=content.strip(),
+            text=(content or "").strip(),
             prompt_tokens=getattr(usage, "prompt_tokens", None),
             completion_tokens=getattr(usage, "completion_tokens", None),
             total_tokens=getattr(usage, "total_tokens", None),
             model=getattr(response, "model", None),
+            system_fingerprint=getattr(response, "system_fingerprint", None),
+            cached_prompt_tokens=cached_prompt_tokens(usage),
+            finish_reason=choice.finish_reason,
         )
 
     def stream(self, messages: Messages) -> Iterator[str]:
@@ -110,8 +163,8 @@ class ChatCompletionsBackend:
         response_stream = self.client.chat.completions.create(
             model=self.model,
             messages=messages,
-            temperature=self.temperature,
             stream=True,
+            **self._sampling(),
         )
 
         with response_stream as chunks:

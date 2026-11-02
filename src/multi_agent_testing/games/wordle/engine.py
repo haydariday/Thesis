@@ -5,11 +5,21 @@ from dataclasses import asdict, dataclass
 from .dataset import WordlePuzzle
 
 
+# Real Wordle allows 6 guesses. Up to 12 is allowed as a handicap for weaker
+# players, as in Xiao and Yang (2025).
+STANDARD_GUESSES = 6
+MAX_GUESS_LIMIT = 12
+
+
 def normalize_guess(value: str) -> str:
     word = value.strip().upper()
 
     if len(word) != 5 or not word.isascii() or not word.isalpha():
-        raise ValueError("Guess must contain five ASCII letters.")
+        shown = value if len(value) <= 40 else value[:37] + "..."
+        raise ValueError(
+            f"{shown!r} is not a five-letter word. The action must be exactly "
+            "five letters A-Z, with no '?', '_', spaces or patterns."
+        )
 
     return word
 
@@ -49,10 +59,10 @@ class WordleGame:
         puzzle: WordlePuzzle,
         *,
         allowed_guesses: Collection[str] | None = None,
-        max_attempts: int = 6,
+        max_attempts: int = STANDARD_GUESSES,
     ) -> None:
-        if type(max_attempts) is not int or not 1 <= max_attempts <= 6:
-            raise ValueError("max_attempts must be between 1 and 6.")
+        if type(max_attempts) is not int or not 1 <= max_attempts <= MAX_GUESS_LIMIT:
+            raise ValueError(f"max_attempts must be between 1 and {MAX_GUESS_LIMIT}.")
 
         self.puzzle_id = puzzle.puzzle_id
         self._answer = normalize_guess(puzzle.answer)
@@ -69,6 +79,12 @@ class WordleGame:
             raise ValueError(
                 "The answer must be in the allowed vocabulary."
             )
+
+    @property
+    def vocabulary(self) -> frozenset[str] | None:
+        """The allowed guesses, or None when any five letters are accepted."""
+
+        return frozenset(self._allowed) if self._allowed is not None else None
 
     @property
     def won(self) -> bool:
@@ -110,12 +126,15 @@ class WordleGame:
 
         if self._allowed is not None and word not in self._allowed:
             raise ValueError(
-                "Guess is outside the allowed vocabulary."
+                f"{word} is not in the allowed vocabulary. "
+                "Use one real five-letter English word."
             )
 
         if any(result.guess == word for result in self._history):
+            played = ", ".join(result.guess for result in self._history)
             raise ValueError(
-                "This prototype does not allow repeated guesses."
+                f"{word} was already played. Already played: {played}. "
+                "Choose a word that has not been played."
             )
 
         return word

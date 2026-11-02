@@ -1,0 +1,41 @@
+flowchart TB
+  subgraph IN["Study input and preparation"]
+    direction LR
+    ARC[("Wordle puzzle archive<br/>answers and human<br/>guess distributions")]
+    HUM["Human data cleaning<br/>human mean per puzzle,<br/>difficulty quartiles"]
+    MAN["Puzzle list<br/>puzzles × repetitions,<br/>stratified by quartile"]
+    ARC -- "human shares" --> HUM -- "quartiles" --> MAN
+  end
+
+  subgraph GAME["Game under test"]
+    direction LR
+    VOC[("Allowed-guess<br/>list")] --> ENV["Wordle engine<br/>hidden answer,<br/>G/Y/B feedback"]
+  end
+
+  subgraph SYS["Playtester system"]
+    direction LR
+    RUN["Experiment runner<br/>one game per puzzle<br/>and repetition"] --> BR["Bridge<br/>state extraction,<br/>consensus action"]
+    BR <-- "game state /<br/>final guess" --> DEB["Multi-agent debate<br/>GM, Bold, Cautious,<br/>Casual"]
+    KNO["Game knowledge<br/>rules, reply format,<br/>personas"] --> DEB
+    BR --> LOG[("Run records<br/>guesses used, turn<br/>statistics, call log")]
+  end
+
+  subgraph EVAL["Evaluation"]
+    direction LR
+    ANA["Analysis<br/>RQ1 consistency,<br/>RQ2 human agreement"] --> EXP["Expert evaluation<br/>RQ3, planned"]
+  end
+
+  IN -- "puzzle answers" --> GAME
+  IN -- "puzzle list" --> SYS
+  GAME <-- "guess / feedback" --> SYS
+  SYS -- "difficulty data" --> EVAL
+  IN -- "human baseline" --> EVAL
+
+  classDef sys fill:#dbe9f6,stroke:#1f4e79,stroke-width:1.5px,color:#111
+  classDef ext fill:#f2f2f2,stroke:#7f7f7f,stroke-width:1px,color:#111
+  class RUN,BR,DEB,KNO,LOG sys
+  class ARC,HUM,MAN,ENV,VOC,ANA,EXP ext
+  style SYS fill:#f4f9fe,stroke:#1f4e79,stroke-width:2.5px
+  style IN fill:#ffffff,stroke:#7f7f7f,stroke-dasharray:6 4
+  style GAME fill:#ffffff,stroke:#7f7f7f,stroke-dasharray:6 4
+  style EVAL fill:#ffffff,stroke:#7f7f7f,stroke-dasharray:6 4

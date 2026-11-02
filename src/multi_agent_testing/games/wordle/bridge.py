@@ -1,5 +1,6 @@
 import json
 
+from .candidates import known_letters
 from .engine import GuessResult, WordleGame
 
 
@@ -10,6 +11,15 @@ class WordleBridge:
         self._game = game
 
     def observe(self) -> str:
+        observation = self._game.observation()
+        # Agents never see the guess limit, so the first six guesses play the
+        # same under a 6- or 12-guess limit. Run logs still record it.
+        observation = {
+            key: value
+            for key, value in observation.items()
+            if key != "attempts_remaining"
+        }
+
         return json.dumps(
             {
                 "rules": (
@@ -23,8 +33,13 @@ class WordleBridge:
                     "Use only the public history; do not invent feedback."
                     "The action field must contain only the five uppercase "
                     "ASCII letters, with no instruction, spaces, or punctuation. "
+                    "known_letters restates the public feedback: pattern shows "
+                    "confirmed letters, misplaced letters are in the word but "
+                    "not at the listed 1-based positions, absent letters are "
+                    "not in the word, and exact_count gives known letter counts."
                 ),
-                "observation": self._game.observation(),
+                "observation": observation,
+                "known_letters": known_letters(observation["history"]),
             },
             ensure_ascii=False,
         )

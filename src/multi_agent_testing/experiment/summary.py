@@ -57,7 +57,8 @@ def summarize_run(run: dict, run_file: str) -> dict:
     if game_finished and won is True:
         penalized_score = guesses_used
     elif game_finished and won is False:
-        penalized_score = 7
+        # A loss scores one more than the guess limit (7 in standard Wordle).
+        penalized_score = int(metadata.get("max_guesses") or 6) + 1
     else:
         penalized_score = None
 

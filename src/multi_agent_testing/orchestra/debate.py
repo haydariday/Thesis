@@ -3,16 +3,21 @@ import time
 from collections.abc import Callable
 
 from ..agent.agent import Agent
-from ..agent.agent_role import AgentRole
 from ..agent.backend import Completion
+from ..agent.persona_spec import ActionRule
+from ..agent.personas import Lineup
 from ..decision import AgentDecision
 from ..run_log import CallRecorder
-from .debate_context import DebateState, Termination
-from .flow.sequential import CHALLENGE, FINALIZE, build_sequential_graph
+from .debate_context import DebateState, NodeFn, Termination
+from .flow.sequential import FINALIZE, NEXT_ROUND, build_sequential_graph
+
+
+class RepairExhausted(ValueError):
+    """An agent's reply stayed invalid after every allowed repair."""
 
 
 def create_debate_graph(
-    agents: dict[AgentRole, Agent],
+    lineup: Lineup,
     *,
     stream: bool = False,
     validate_action: Callable[[str], str] | None = None,
@@ -21,8 +26,10 @@ def create_debate_graph(
 ):
     """Build the debate using validated model decisions."""
 
+    gm = lineup.gm
+
     def record_call(
-        role: AgentRole,
+        agent: Agent,
         attempt: int,
         *,
         rejected: bool,
@@ -34,7 +41,7 @@ def create_debate_graph(
             return
 
         recorder.record(
-            role=role.value,
+            role=agent.role.value,
             attempt=attempt,
             rejected=rejected,
             error_type=error_type,
@@ -53,21 +60,35 @@ def create_debate_graph(
             model=(
                 completion.model if completion is not None else None
             ),
+            system_fingerprint=(
+                completion.system_fingerprint
+                if completion is not None
+                else None
+            ),
+            cached_prompt_tokens=(
+                completion.cached_prompt_tokens
+                if completion is not None
+                else None
+            ),
+            rejected_text=(
+                completion.text
+                if rejected and completion is not None
+                else None
+            ),
         )
 
     def ask(
-        role: AgentRole,
+        agent: Agent,
         state: DebateState,
         task: str,
         *,
         allow_stop: bool = False,
+        action_rule: ActionRule = ActionRule.ANY,
     ) -> AgentDecision:
-        agent = agents[role]
-
         payload = {
             "game_context": state["context"],
             "proposal": state["proposal"],
-            "alternative": state["alternative"],
+            "suggestions": state["suggestions"],
             "transcript": state["transcript"],
             "completed_rounds": state["round"],
             "task": task,
@@ -101,7 +122,7 @@ def create_debate_graph(
                     print()
 
                 record_call(
-                    role,
+                    agent,
                     attempt + 1,
                     rejected=False,
                     error_type=type(exc).__name__,
@@ -127,34 +148,32 @@ def create_debate_graph(
                             }
                         )
 
-                    if decision.stop and (
-                        role != AgentRole.GM or not allow_stop
-                    ):
+                    if decision.stop and (agent is not gm or not allow_stop):
                         raise ValueError(
                             "Only GM review may request a stop."
                         )
 
                     if (
-                        role == AgentRole.NEGATIVE
+                        action_rule == ActionRule.MUST_DIFFER
                         and decision.action == state["proposal"]
                     ):
                         raise ValueError(
-                            "Negative must offer a different action."
+                            f"{agent.name} must offer a different action."
                         )
 
                     if (
-                        role == AgentRole.POSITIVE
+                        action_rule == ActionRule.MUST_EQUAL
                         and decision.action != state["proposal"]
                     ):
                         raise ValueError(
-                            "Positive must defend the current GM action."
+                            f"{agent.name} must defend the current GM action."
                         )
 
                 except ValueError as exc:
                     error = exc
 
             record_call(
-                role,
+                agent,
                 attempt + 1,
                 rejected=error is not None,
                 error_type=(
@@ -175,7 +194,7 @@ def create_debate_graph(
             print(f"Rejected response: {error}")
 
             if attempt == max_repairs:
-                raise ValueError(
+                raise RepairExhausted(
                     f"{agent.name} failed validation after "
                     f"{max_repairs + 1} attempt(s): {error}"
                 ) from error
@@ -192,6 +211,7 @@ def create_debate_graph(
                     "and the game rules. "
                     "Return only the required JSON. "
                     "Keep your assigned role. "
+                    "Do not repeat the rejected action. "
                     "This is a correction within the same turn, "
                     "not a new round."
                 ),
@@ -201,83 +221,96 @@ def create_debate_graph(
 
     def gm_propose(state: DebateState) -> dict:
         decision = ask(
-            AgentRole.GM,
+            gm,
             state,
             "Propose an initial action. Set stop to false. "
             "The advisors have not spoken yet.",
         )
 
-        if decision.stop:
-            raise ValueError(
-                "GM proposal cannot stop before advisor review."
-            )
-
         return {
             "proposal": decision.action,
+            "initial_proposal": decision.action,
             "transcript": state["transcript"] + [
                 f"GM proposes {decision.action}: {decision.reason}"
             ],
         }
 
-    def negative_challenge(state: DebateState) -> dict:
-        decision = ask(
-            AgentRole.NEGATIVE,
-            state,
-            "Challenge the current GM proposal. Propose a different "
-            "action and explain why it may be better. Set stop to false.",
-        )
+    def advisor_node(agent: Agent) -> tuple[str, NodeFn]:
+        spec = agent.persona
 
-        if decision.stop:
-            raise ValueError("Negative cannot stop the debate.")
+        verb = "defends" if spec.action_rule == ActionRule.MUST_EQUAL else "suggests"
 
-        if decision.action == state["proposal"]:
-            raise ValueError(
-                "Negative must offer a different action."
-            )
+        def node(state: DebateState) -> dict:
+            try:
+                decision = ask(agent, state, spec.task, action_rule=spec.action_rule)
+            except RepairExhausted:
+                # Advice is optional: the GM reviews without this advisor.
+                return {
+                    "suggestion_log": state["suggestion_log"] + [
+                        {
+                            "round": state["round"] + 1,
+                            "advisor": spec.key,
+                            "action": None,
+                            "gm_proposal": state["proposal"],
+                            "abstained": True,
+                        }
+                    ],
+                    "fallbacks": state["fallbacks"] + [f"abstained:{spec.key}"],
+                    "transcript": state["transcript"] + [
+                        f"{agent.name} abstains: no valid suggestion this round."
+                    ],
+                }
 
-        return {
-            "alternative": decision.action,
-            "transcript": state["transcript"] + [
-                f"Negative suggests {decision.action}: {decision.reason}"
-            ],
-        }
+            return {
+                "suggestions": {
+                    **state["suggestions"],
+                    spec.key: {
+                        "action": decision.action,
+                        "reason": decision.reason,
+                    },
+                },
+                "suggestion_log": state["suggestion_log"] + [
+                    {
+                        "round": state["round"] + 1,
+                        "advisor": spec.key,
+                        "action": decision.action,
+                        "gm_proposal": state["proposal"],
+                        "abstained": False,
+                    }
+                ],
+                "transcript": state["transcript"] + [
+                    f"{agent.name} {verb} {decision.action}: {decision.reason}"
+                ],
+            }
 
-    def positive_defend(state: DebateState) -> dict:
-        decision = ask(
-            AgentRole.POSITIVE,
-            state,
-            "Counter the latest Negative critique and defend the current "
-            "GM proposal. Your action must equal the proposal exactly. "
-            "Acknowledge valid limitations. Set stop to false.",
-        )
-
-        if decision.stop:
-            raise ValueError("Positive cannot stop the debate.")
-
-        if decision.action != state["proposal"]:
-            raise ValueError(
-                "Positive must defend the current GM action."
-            )
-
-        return {
-            "transcript": state["transcript"] + [
-                f"Positive defends {decision.action}: {decision.reason}"
-            ],
-        }
+        return spec.key, node
 
     def gm_review(state: DebateState) -> dict:
-        decision = ask(
-            AgentRole.GM,
-            state,
-            "Review both advisors and the full transcript. Retain or "
-            "revise the proposal. Set stop to true only if another "
-            "round is unlikely to change your decision; otherwise false. "
-            "Do not claim unanimous agreement without evidence.",
-            allow_stop=True,
-        )
+        try:
+            decision = ask(
+                gm,
+                state,
+                "Review every advisor's suggestion and the full transcript. "
+                "Retain or revise the proposal. Set stop to true only if another "
+                "round is unlikely to change your decision; otherwise false. "
+                "Do not claim unanimous agreement without evidence.",
+                allow_stop=True,
+            )
+        except RepairExhausted:
+            # The standing proposal was already validated, so keep it.
+            return {
+                "suggestions": {},
+                "round": state["round"] + 1,
+                "stop": False,
+                "fallbacks": state["fallbacks"] + ["gm_review_kept_proposal"],
+                "transcript": state["transcript"] + [
+                    f"GM review gave no valid decision; {state['proposal']} stands."
+                ],
+            }
 
         return {
             "proposal": decision.action,
+            "suggestions": {},
             "round": state["round"] + 1,
             "stop": decision.stop,
             "transcript": state["transcript"] + [
@@ -289,7 +322,7 @@ def create_debate_graph(
         if state["stop"] or state["round"] >= state["max_rounds"]:
             return FINALIZE
 
-        return CHALLENGE
+        return NEXT_ROUND
 
     def finalize(state: DebateState) -> dict:
         return {
@@ -303,8 +336,7 @@ def create_debate_graph(
 
     return build_sequential_graph(
         gm_propose=gm_propose,
-        negative_challenge=negative_challenge,
-        positive_defend=positive_defend,
+        advisors=[advisor_node(agent) for agent in lineup.advisors],
         gm_review=gm_review,
         finalize=finalize,
         route_after_review=route_after_review,

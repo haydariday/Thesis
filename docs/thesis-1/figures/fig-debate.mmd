@@ -1,0 +1,20 @@
+%%{init: {"themeVariables": {"actorBkg": "#dbe9f6", "actorBorder": "#1f4e79", "noteBkgColor": "#f4f9fe", "noteBorderColor": "#1f4e79", "noteTextColor": "#111111", "signalColor": "#333333", "signalTextColor": "#111111", "labelBoxBkgColor": "#ffffff", "labelBoxBorderColor": "#1f4e79", "loopTextColor": "#111111"}, "sequence": {"mirrorActors": false, "actorMargin": 60, "noteMargin": 12, "messageMargin": 34}}}%%
+sequenceDiagram
+  participant BR as Bridge
+  participant GM as Game Master
+  participant BO as Bold
+  participant CU as Cautious
+  participant CS as Casual
+
+  BR->>GM: Game state: SLATE → YBBGB,<br/>pattern _ _ _ T _, S not at 1, A E L absent
+  Note over GM,CS: Every agent sees the game state, the current proposal,<br/>the suggestions of this round and the transcript
+  loop Round 1 to 3, until the GM stops
+    GM->>BO: Proposes STORM
+    BO-->>GM: STORK: "STORM repeats S at position 1 ...<br/>STORK keeps S at position 2, T at 4"
+    CU-->>GM: STORK: "tests fresh letters R, O, K<br/>to eliminate more candidates safely"
+    CS-->>GM: STORM: "feels like a normal<br/>word I'd actually guess"
+    Note over GM: Review: selects STORK,<br/>since S at position 1<br/>is ruled out
+    Note over GM,CS: Rounds 2 and 3: every advisor agrees with STORK,<br/>so the GM keeps it until the round limit
+  end
+  GM->>BR: Final guess STORK
+  Note over BR: Validates and executes<br/>STORK → YYBBB, the<br/>next game state

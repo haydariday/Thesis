@@ -13,7 +13,9 @@ Pilot-02 replaces the Negative/Positive advisors with playstyle personas. It als
 | Supervisor's 7-bin advice | Compare the system's guess-count distribution with the human distribution for each puzzle (bins 1–6 plus 7 = fail). |
 | D1–D4 test | "Play, then map": the system plays the puzzle, and its mean score is placed into a quartile using the human cut-points. The model never rates difficulty directly. |
 | Human data | Standard mode only. The `hardmode` block is not used. |
-| Model | A new model that accepts `temperature`, served by OpenCode Zen through the chat-completions protocol. |
+| Model | `deepseek-flash` (DeepSeek-V4.1-Flash) on the DeepSeek API, chat-completions protocol, thinking mode `disabled` so that temperature applies. Fixed at P0 (2026-10-13), replacing `glm-5.3-flash` after the P8 smoke game timed out (Section 6). |
+| RQ1 in pilot-02 | Descriptive only: within-puzzle SD, ICC and exact-match rates with bootstrap CIs, and no pass/fail margin. The equivalence margin for the final study is chosen at P15 from pilot-02's observed spread and fixed before any final run. Decided at P0 (2026-10-13). |
+| Temperature | `0.2`. Fixed at P0 (2026-10-13). Pilot-01 recorded `null` because its model rejected the parameter, so this is the first pilot with a controlled temperature. It favors RQ1 consistency. The narrower system distribution is a known limit for the RQ2 distribution comparison. |
 | Distribution pilot size | 32 runs × 12 puzzles, which gives the Thompson ±20% precision level (see Section 5). |
 
 ## 2. Personas (modular)
@@ -27,14 +29,16 @@ agent/personas.py
   PersonaSpec(key, display_name, slot, instruction, task, action_rule)
       slot:        "gm" | "advisor"
       action_rule: "any" | "must_differ" | "must_equal"   (kept for the pilot-01 personas)
-  PERSONAS = {neutral_gm, negative, positive, bold, cautious, casual}
+  PERSONAS = {neutral_gm_v1, neutral_gm, negative, positive, bold, cautious, casual}
   PRESETS  = {
-      "pilot-01":        gm=neutral_gm, advisors=[negative, positive],
+      "pilot-01":        gm=neutral_gm_v1, advisors=[negative, positive],
       "pilot-02":        gm=neutral_gm, advisors=[bold, cautious, casual],
       "pilot-02-core":   gm=neutral_gm, advisors=[bold, cautious],
   }
-  create_agents(backend, preset=... | gm=..., advisors=[...])
+  create_lineup(backend, preset=... | advisors=[...], gm=...) -> Lineup(gm, advisors)
 ```
+
+`neutral_gm_v1` is the exact pilot-01 GM text, which says "evaluate both arguments". `neutral_gm` says "evaluate every advisor's argument" so it fits any number of advisors. `create_agents(backend)` stays as the pilot-01 role-keyed dict until P5 switches the graph to `Lineup`.
 
 - **CLI and config:** `--persona-preset pilot-02` or `--advisors bold,cautious,casual`. The chosen keys and the full instruction text are written into `experiment_config.json` and each run's metadata.
 - **Debate graph:** `orchestra/flow/sequential.py` builds one node per advisor from the list, in order (`gm_propose → advisor_1 → … → advisor_n → gm_review`). The routing policy and the `max_rounds` cap stay the same.
@@ -52,6 +56,8 @@ agent/personas.py
 
 Advisors use `action_rule = "any"`. That means an advisor may agree with the GM by returning the same word, which is recorded as agreement rather than rejected.
 
+**Sign-off (2026-10-13, after P8):** the persona texts in `agent/personas.py` are accepted unchanged, including Casual's "habitual opening word". In the P8 smoke games Casual proposed CRANE as its opener in all three games at temperature 1.0, while at 0.2 it agreed with the GM. The GM itself proposed SLATE on turn 1 in 5 of 6 games and CRANE on turn 2 in 5 of 6. Repeated openers are realistic for daily players, but they raise RQ1 consistency, so P13 reports the opening guesses and their source (Section 7).
+
 ### 2.3 New per-turn instrumentation
 
 These fields are logged in every turn record. They feed the persona statistics now and a possible GM-persona RQ later.
@@ -61,11 +67,11 @@ These fields are logged in every turn record. They feed the persona statistics n
 | `initial_proposal` | The GM's first proposal in the turn. |
 | `final_action` | The executed guess. |
 | `gm_retained` | `final_action == initial_proposal`. |
-| `advisor_suggestions` | Each advisor's suggestion and round. |
-| `adopted_from` | The advisors whose suggestion equals the final action when it differs from the initial proposal. |
-| `advisor_agreed` | Whether each advisor returned the GM's proposal unchanged. |
-| `is_candidate` | For each suggestion and the final action, whether the word is still consistent with all public feedback, meaning it could still be the answer. This is computed from public history only. |
-| `candidates_remaining` | The number of vocabulary words still consistent with the feedback before the turn. |
+| `advisor_suggestions` | Each advisor's suggestion with its round, the GM proposal it answered, `agreed` and `is_candidate`. |
+| `adopted_from` | The advisors whose suggestion (in any round) equals the final action when it differs from the initial proposal. Empty when the GM keeps its word or picks a word no advisor offered. |
+| `advisor_agreed` | Whether each advisor returned the GM's current proposal unchanged. Over several rounds it is true only if the advisor agreed in every round. |
+| `is_candidate` | For each suggestion, the initial proposal and the final action, whether the word is still consistent with all public feedback, meaning it could still be the answer. This is computed from public history only. |
+| `candidates_remaining` | The number of words in the allowed-guess vocabulary (14,855) still consistent with the feedback before the turn. |
 
 Aggregated per experiment, these give:
 
@@ -109,7 +115,7 @@ Eligible puzzles are sorted by `(human_mean, puzzle_id)` and split into four gro
 | D3 | 465 | 4.24 – 4.53 | 18% |
 | D4 (hardest) | 466 | 4.53 – 6.21 | 83% |
 
-The cut-points (about 3.98, 4.24 and 4.53) are frozen in the config before any runs. The old easy/hard line at 4.0 is almost exactly the D1 boundary, which means 75% of puzzles were labelled "hard" under the old rule. This is a strong argument for the quartile scheme.
+The cut-points are exactly 3.98, 4.24 and 4.53, frozen in `src/data/processed/quartiles.json` (P2) before any runs. Human means are multiples of 0.01, so some puzzles tie at a boundary: 3, 13 and 1 puzzles (17 in total, 0.9%) share the cut value but sit in the lower quartile by rank (the tie-break is the puzzle id). A system score is mapped by value (`D1: s < 3.98`, `D2: 3.98 ≤ s < 4.24`, `D3: 4.24 ≤ s < 4.53`, `D4: s ≥ 4.53`), so a tied human puzzle mapped the same way would move up one quartile. The old easy/hard line at 4.0 is almost exactly the D1 boundary, which means 75% of puzzles were labelled "hard" under the old rule. This is a strong argument for the quartile scheme.
 
 ## 4. Experiment structure: why RQ1 and RQ2 are split
 
@@ -128,7 +134,11 @@ Both experiments use one frozen configuration (model, temperature, personas and 
 
 ### Where the D1–D4 test belongs (question 3C)
 
-It belongs under **RQ2**. RQ2 already asks about agreement with human difficulty "using average guess scores and easy/hard categories". D1–D4 replaces easy/hard as the categorical measure. This needs no new RQ, only a wording change in RQ2: "… measured using average guess scores, guess-count distributions and difficulty quartiles".
+It belongs under **RQ2**. RQ2 already asks about agreement with human difficulty "using average guess scores and easy/hard categories". D1–D4 replaces easy/hard as the categorical measure. This needs no new RQ, only a wording change in RQ2. The proposed wording (chosen 2026-10-13, pending supervisor approval) is general and leaves the measures to the method chapter:
+
+> To what extent do the difficulty estimates derived from the multi-agent system's playtest outcomes agree with human difficulty?
+
+The method chapter then defines agreement at three levels: average score (MAE, correlation), guess-count distribution (W1 and the secondary distances) and difficulty level (D1–D4). If the supervisor keeps the original wording, the analysis does not change; the distribution and quartile results become secondary analyses.
 
 ## 5. Sample-size justification
 
@@ -161,21 +171,130 @@ For the pilot, [Julious (2005)](https://onlinelibrary.wiley.com/doi/abs/10.1002/
 
 ## 6. Model and frozen configuration
 
-- **Model:** a temperature-capable chat-completions model on OpenCode Zen. The current candidate is `deepseek-v4-flash` ($0.14 input / $0.28 output per 1M tokens, chat completions), according to the [OpenCode Zen model list](https://opencode.ai/docs/zen/). A one-call probe must confirm that it accepts `temperature` and returns usage before any runs. If it fails, the probe moves to the next cheap chat model on the list.
-- **Temperature (decision needed):** a low temperature (0.2, as in pilot-01) favors RQ1 consistency but narrows the system's distribution, which makes the RQ2 distribution comparison almost meaningless. A higher value (for example 1.0) treats each run as one simulated player. This choice must be made and recorded before the runs, ideally with the supervisor.
+- **Model:** `deepseek-flash` (DeepSeek-V4.1-Flash) on the DeepSeek API (`https://api.deepseek.com`, key `DEEPSEEK_API_KEY`). Official prices per 1M tokens are $0.15 input (cache miss), $0.003 (cache hit) and $0.60 output off-peak, doubled at peak (01:00–04:00 and 06:00–10:00 UTC on weekdays), according to the [DeepSeek pricing page](https://api-docs.deepseek.com/quick_start/pricing).
+- **Why not `glm-5.3-flash`:** the first plan used it through OpenCode Zen. Its P8 probe passed, but the smoke game failed. The Cautious call on turn 2 timed out twice (601 s), and the Bold call before it took 56 s and 4,741 completion tokens of hidden reasoning. Both files are kept in `runs/`.
+- **Thinking mode `disabled`:** DeepSeek's thinking mode is the default, and it ignores `temperature` ([thinking mode guide](https://api-docs.deepseek.com/guides/thinking_mode)). Non-thinking mode keeps the P0 temperature meaningful, and it is faster and cheaper. The debate is the reasoning step. The runner refuses `--temperature` with `--thinking enabled`.
+- **Snapshot drift:** `deepseek-flash` is an alias. DeepSeek moved it from V4 to V4.1 on 2026-09-10 without a new name, and the returned `model` field only echoes the alias. Each call therefore logs `system_fingerprint`. P10 and P11 run back to back, with the dates recorded. A fingerprint change during the runs splits the configuration.
+- **Temperature (decided at P0: `0.2`):** a low temperature favors RQ1 consistency but narrows the system's distribution. That weakens the RQ2 distribution comparison, and the results must say so. A higher value (for example 1.0) would treat each run as one simulated player. That option stays open for a later configuration.
+- **Reply settings (added at P8):** `max_tokens=1024` (valid replies stay under about 200 tokens), DeepSeek JSON mode (`response_format: json_object`), and a shared prompt line "Keep reason short: at most two sentences and about 40 words." A reply cut off at the cap or returned empty is a rejection with the normal repair re-ask, and a missing `stop` field means `false`. Each call logs `system_fingerprint`, cached prompt tokens and, for rejected attempts, the raw reply text.
+- **Observation (added at P8):** besides the raw history, agents see `known_letters`, a summary computed from public feedback only: the green pattern, misplaced letters with their excluded positions, absent letters and known letter counts. It plays the role of the colored keyboard a human player sees. It contains no candidate list and no example, so the method stays zero-shot. A property test checks that it never rules out a word the feedback still allows.
+- **P8 smoke evidence (puzzle 234, FRAME, human mean 4.41):** before the reply settings and `known_letters`, games crashed on runaway replies or lost with most guesses unable to be the answer. With both in place, 3 games at 0.2 won in 5, 4 and 5 guesses, while 3 games at 1.0 all lost. At 0.2 the non-candidate share of suggestions from turn 2 on was 7/33 for Bold, 15/33 for Cautious and 3/33 for Casual, which is the intended Bold/Cautious direction. These are pilot checks on one puzzle, not results. All files are in `runs/` (`probe-*`, `smoke-pilot-02-*`, `smoke-known-*`).
 - **Unchanged from pilot-01:** `max_rounds=3`, non-streaming, `max_repairs=1`, `request_timeout=300`, `api_retries=1`, `max_attempts_per_unit=2`, and the vocabulary and dataset hashes.
-- **Cost estimate:** with three advisors a turn has five calls instead of four, so about 119 s and 18k tokens per game. Exp A and Exp B together come to about 528 games, 17–18 hours and 9.5M tokens. The real speed depends on the chosen model.
+- **Cost estimate (measured at P8, temperature 0.2):** about 57 s, 61 calls, 57k prompt tokens (23k from cache) and 3k completion tokens per game, or about $0.007 at off-peak prices. The 528 games of Exp A and Exp B come to about 8.5 hours and $4 off-peak, or about $8 at peak prices.
+
+### 6.1 Frozen configuration (P9, tag `pilot-02-frozen`, 2026-10-13)
+
+Both experiments run from the commit tagged `pilot-02-frozen`. Each run's `experiment_config.json` records `code_revision`, `code_dirty` (must be `false`) and `source_sha256`. `resume` refuses if the source changed since `start`.
+
+| Item | Frozen value |
+|---|---|
+| Model | `deepseek-flash` (DeepSeek-V4.1-Flash), `https://api.deepseek.com`, key `DEEPSEEK_API_KEY` |
+| Fingerprint seen at P8 | `aeb56401ca74e127821c4f9126dcb669` (probe and every smoke call). A different value during the runs splits the configuration. |
+| Sampling | thinking `disabled`, temperature `0.2`, `max_tokens=1024`, JSON mode on |
+| Debate | preset `pilot-02` (`neutral_gm`; advisors `bold`, `cautious`, `casual`), `max_rounds=3`, `max_repairs=1` |
+| Requests | `request_timeout=300`, `api_retries=1`, `max_attempts_per_unit=2` |
+| Source | `source_sha256` `58104891a7aae6440c4b97518b2cbd01592ff33e6c54f44ba029c47aa8f8a595` |
+| Dataset | `worldepuzzles.json` `ed235aa79e1c13a684b7517dda08976967ce8ddb653943632d71b7dea2c41a27` |
+| Guess list | `allowed_guesses.txt` `9df5dad1b44cf1b9e0fa7c3ebff94d69ff7efb59f8691ac88e74e1c7b3da121e` |
+| Manifests | wide `b95b2899fc87eb3d340ce4260e2c407aa047213087c72bc3538ebb47172d7cc1`, deep `863971e383a8a9927726f5b4dfa66b0648860295ac08a62b046d7454d9ed01e5` |
+| Human data | `wordle_human_clean.csv` `3f15e93bf54eb238f5395075c80e711cbfd3842c7d2d6f4dd30274217a83b3a8`, `quartiles.json` `d91925d785922415cfcca528f5cd211ff5273b403c2832ade0ba20e95ed00a6d` |
+| Environment | Python 3.12.14, langgraph 1.2.13, openai 3.26.0, pydantic 2.13.5, `uv.lock` `6250936871fd77f3e0bef9eca42f6c6c32ea211da2f2d4164ab764637221f970` |
+
+**Run rules.** Run P10 and then P11 back to back from the tag, with a clean tree. Commit nothing until P11 has started, because pooling requires the same `code_revision` (README rule 1). Prefer off-peak hours (outside 01:00–04:00 and 06:00–10:00 UTC on weekdays). Results are committed only after both experiments finish.
+
+P10, Exp B (wide), 48 × 3 games, about 2.3 hours:
+
+```bash
+uv run python -m multi_agent_testing.experiment.runner start \
+  --experiment-dir experiments/pilot-02-wide \
+  --manifest experiments/manifests/pilot-02-wide.csv \
+  --dataset src/data/raw/worldepuzzles.json \
+  --guess-list src/data/raw/allowed_guesses.txt \
+  --backend deepseek --protocol chat --model deepseek-flash \
+  --base-url 'https://api.deepseek.com' \
+  --thinking disabled --temperature 0.2 --max-tokens 1024 --json-mode \
+  --max-rounds 3 --max-repairs 1 --request-timeout 300 --api-retries 1 \
+  --repetitions 3 --max-attempts 2 \
+  --persona-preset pilot-02 \
+  --max-seconds 3600
+```
+
+P11, Exp A (deep), 12 × 32 games, about 6 hours: the same command with `--experiment-dir experiments/pilot-02-deep`, `--manifest experiments/manifests/pilot-02-deep.csv` and `--repetitions 32`.
+
+Continue either experiment after a chunk or an interruption with:
+
+```bash
+uv run python -m multi_agent_testing.experiment.runner resume \
+  --experiment-dir experiments/pilot-02-wide --max-seconds 3600
+```
+
+Between P10 and P11, the checkpoint in Section 9 applies: run `analysis_pilot02 --wide experiments/pilot-02-wide --output-dir <a scratch folder>` and look at the fingerprints and the Cautious minus Bold gap before starting P11.
+
+### 6.2 Configuration vA (tag `pilot-02-va-frozen`, 2026-10-19)
+
+The first P10 run under 6.1 (`experiments/pilot-02-wide`, 2026-10-13) completed 125 of 144 units. All 19 failures were repair errors. It is kept as a record and does not pool with vA.
+
+Three variants were then smoke-tested on 8 puzzles (2 per quartile) × 2 games. The files are `runs/smoke-vA-*`, `runs/smoke-vB-*` and `runs/smoke-vC-*`.
+
+| Variant | Settings | Completed | Spearman vs human | Cost of 528 games (off-peak) |
+|---|---|---|---|---|
+| vA | thinking off, temperature 0.2, 12 guesses | 13/16 | 0.72 (7 puzzles) | about $5 |
+| vB | thinking on, effort `low`, 6 guesses, `max_tokens=4096` | 16/16 | 0.25 | about $24 |
+| vC | thinking off, temperature 1.0, 12 guesses | 15/16 | 0.13 | about $6 |
+
+vB won every game in 3 or 4 guesses, so it barely separates the quartiles (`runs/workers-check-v2`). vC adds noise that blurs the ranking. vA is run first. vB may follow as a second configuration on the same manifests.
+
+**Guess limit.** Agents never see the limit (`bridge.py` drops `attempts_remaining`). The first six guesses therefore play the same as under a 6-guess limit. A vA score capped at 7 equals the real Wordle score. The extra guesses keep hard puzzles apart instead of tying them at 7. This follows the handicap in Xiao and Yang (2025).
+
+**RQ2 under vA.** Relative difficulty is primary: Spearman ρ on raw scores (1–13). Sensitivity checks cap the scores at 9 and at 7. MAE, the cut-point D1–D4 table and the 7-bin comparison use scores capped at 7. Kendall τ, rank-based system quartiles and the score cap are added to `analysis_pilot02` after both vA runs finish, since `resume` refuses any source change.
+
+| Item | vA value (changes from 6.1 in bold) |
+|---|---|
+| Sampling | thinking `disabled`, temperature `0.2`, `max_tokens=1024`, JSON mode on |
+| Guess limit | **`--max-guesses 12`**, a loss scores 13 |
+| Debate | preset `pilot-02`, `max_rounds=3`, **`max_repairs=2`** |
+| Requests | `request_timeout=300`, `api_retries=1`, `max_attempts_per_unit=2`, **`--workers 4`** (results do not depend on it) |
+| Source | `source_sha256` `2f8459e9567f53fa1772f8c6af568845165f270862e8fb92dd25927daa4339ce` |
+| Data, manifests, human data, environment | as in 6.1 |
+| Output | `experiments/pilot-02-va-wide`, `experiments/pilot-02-va-deep` |
+
+**Fingerprint.** Every answered vA call returned `system_fingerprint` `e72d3c7f663d3e1383b00b3884cb4501`. All earlier calls, up to the 2026-10-16 check, returned `aeb56401…`, so DeepSeek changed the backend between 16 and 18 October. The vA smoke evidence above comes from the older backend.
+
+The run rules of 6.1 apply. Wide (about 1 hour with 4 workers) and deep (about 2.5 hours) run back to back from the tag, off-peak only. The command is the 6.1 command with `--max-guesses 12 --max-repairs 2 --workers 4` and the vA output dirs. `--max-seconds` is not needed, since the runner pauses for peak hours on its own.
+
+### 6.3 Configuration vB (tag `pilot-02-vb-frozen`, 2026-10-21)
+
+vB asks whether DeepSeek's thinking mode makes a better playtester. It differs from vA only in thinking and in the guess limit. It is a second configuration and never pools with vA.
+
+| Item | vB value (changes from vA in bold) |
+|---|---|
+| Sampling | **thinking `enabled`, `--reasoning-effort low`**, no temperature (thinking ignores it), **`max_tokens=4096`**, JSON mode on |
+| Guess limit | **`--max-guesses 6`**, the human limit. Agents never see it, as in vA. A loss scores 7. |
+| Debate, requests, workers | as vA: preset `pilot-02`, `max_rounds=3`, `max_repairs=2`, `max_attempts_per_unit=2`, `--workers 4` |
+| Source | `source_sha256` `9f8e496a4da1677e260274581f41a891d77705f7c4d2ad4322c3cea4097b0af2` |
+| Data, manifests, human data | as in 6.1 |
+| Output | `experiments/pilot-02-vb-wide`; `experiments/pilot-02-vb-deep` only if deep is run later from the same tag |
+
+**Why 6 guesses.** In the 24 vB games so far (`runs/smoke-vB-*`, `runs/workers-check-v2`) no game needed more than 5 guesses, so a handicap adds nothing. At 6 guesses every vB score is already on the human scale. Because the limit is hidden, a vA game capped at 6 is the game vA would have played under a 6-guess limit.
+
+**Comparison rule (fixed before any vB wide data).** vA and vB are compared on the wide manifest, puzzle by puzzle, on the 6-guess scale: vA's `capped.6_guesses` block against vB's results. The measures are Spearman ρ, Kendall τ, rank-based D1–D4, MAE and signed error. vA's raw 12-guess ranking stays its own primary result and is not set against vB.
+
+**Expectations from the 24 vB games** (old fingerprint `aeb56401…`, 8 puzzles): every game won, scores of 3 to 5, mean about 0.8 guesses below humans, within-puzzle SD about 0.5, ICC(1,1) about 0.34, ρ about 0.3. The risk is many tied puzzle means, which weakens the rank measures.
+
+**Scope and cost.** Wide first: 144 games, about $8 off-peak and about 7 hours with 4 workers. Deep (384 games, about $22) follows only if the wide result calls for it, from the same tag and with no source change in between, so that the two can be pooled.
 
 ## 7. Analysis
 
 A new `experiment/analysis_pilot02.py` reads both experiment directories and writes CSV and JSON outputs. Like the current `analysis.py`, it uses only the standard library.
+
+**Reporting (decided 2026-10-22).** Results are reported in the simplest form: the value of each measure, with a p-value for Spearman ρ and Pearson r (`spearman_p`, `pearson_p`). The p-value comes from the t-test with n − 2 degrees of freedom, the same test Xiao and Yang use. Confidence intervals are not reported. The bootstrap CIs described below are still computed and stay in `metrics.json` as a backup.
 
 ### RQ1 (Exp A)
 
 - Within-puzzle SD of the penalized score, ICC(1,1) and ICC(1,32).
 - Pairwise exact-match rate and mean pairwise absolute difference.
 - Split-half stability of the distribution: Wasserstein distance between runs 1–16 and runs 17–32 of the same puzzle.
-- An equivalence check against a tolerance fixed before the run (for example, within-puzzle SD ≤ 0.5).
+- No equivalence check in pilot-02 (decided at P0). The results are reported as estimates with CIs. P15 uses them to choose the final study's margin, for example within-puzzle SD ≤ 0.5. That value would mean a 3-run mean is precise to about one human quartile width.
 
 ### RQ2 distribution comparison (Exp A)
 
@@ -188,6 +307,9 @@ For each puzzle, compare the system's 7-bin distribution (32 runs) with the huma
 
 ### RQ2 mean alignment and D1–D4 (Exp B, with Exp A as a check)
 
+No primary measure is named for these two levels in pilot-02; every measure below is reported with equal weight. P15 chooses the primaries for the final study from the pilot results (decided 2026-10-13). Candidates are Spearman for the mean level, with MAE and signed error as calibration, and quadratic-weighted kappa for D1–D4.
+
+
 - MAE, signed error, Spearman and Pearson between system and human means.
 - The system mean is mapped to D1–D4 using the frozen human cut-points, which gives a 4×4 confusion matrix.
 - Exact quartile accuracy, adjacent accuracy (within one quartile), quadratic-weighted Cohen's kappa and per-quartile recall.
@@ -196,7 +318,7 @@ For each puzzle, compare the system's 7-bin distribution (32 runs) with the huma
 
 ### Persona and GM statistics (both experiments, descriptive)
 
-GM retention rate, adoption rate for each advisor, agreement rate for each advisor, non-candidate share for each advisor (the manipulation check), and the termination mix (`gm_stop` versus `max_rounds`).
+GM retention rate, adoption rate for each advisor, agreement rate for each advisor, non-candidate share for each advisor (the manipulation check), and the termination mix (`gm_stop` versus `max_rounds`). Also the distribution of opening guesses (turns 1 and 2) per puzzle and which agent proposed each, since repeated openers raise RQ1 consistency (Section 2.2).
 
 ### Reliability (supporting)
 
@@ -213,29 +335,63 @@ Output goes to `experiments/pilot-02-*/figures/` as both PDF (vector, for the pa
 | F1 Human difficulty | Histogram of human means with the D1–D4 cut lines, plus the mean 7-bin distribution for each quartile as stacked bars | Data chapter, quartile definition |
 | F2 Run-to-run spread | Strip or box plot of the 32 scores for each Exp A puzzle, ordered by human mean, with the human mean marked | RQ1 |
 | F3 Distribution comparison | 12 small panels, one per Exp A puzzle, each with paired human and system bars over bins 1–7 and the W1 value in the corner | RQ2 distribution |
-| F4 Distance forest plot | W1 with its bootstrap CI for each puzzle, grouped by quartile | RQ2 distribution |
+| F4 W1 by puzzle | W1 for each puzzle, grouped by quartile, against the split-half noise level | RQ2 distribution |
 | F5 Mean alignment | Scatter of system mean against human mean with the y = x line and quartile cut lines, colored by human quartile | RQ2 mean |
 | F6 Bland-Altman | Difference (system − human) against the average of the two, with bias and limits of agreement | RQ2 mean, shows the systematic "easier than human" bias |
-| F7 Quartile confusion | 4×4 heatmap of human quartile against system quartile, with counts and row percentages | RQ2 D1–D4 |
+| F7 Quartile confusion | System mean against human mean with the rank-based D1–D4 boundaries, beside the 4×4 rank confusion matrix with counts and row percentages | RQ2 D1–D4 |
 | F8 Persona behavior | Bars of GM retention, the adoption rate for each advisor and the non-candidate share for each advisor | Persona manipulation check, future GM RQ |
 | F9 Cost and reliability | Distributions of tokens and seconds per game, plus failure counts | Supporting measurements |
 
 Pilot-01 can be re-plotted with F2, F5, F6 and F7 (using easy/hard or quartiles) so that the two pilots can be compared visually.
 
-## 9. Work list (to implement after this plan is approved)
+## 9. Implementation phases
 
-1. `human_data.py`: produce the clean 7-bin CSV and quartile cut-points, with tests.
-2. Persona registry, presets, CLI flags and the dynamic advisor nodes in the debate graph. Keep a `pilot-01` preset and update the existing tests.
-3. Per-turn instrumentation (Section 2.3) in `play.py` and `run_log.py`.
-4. Pilot-02 manifests (`pilot-02-deep.csv`, `pilot-02-wide.csv`) built with stratified quartile sampling and recorded seeds.
-5. Model probe: confirm that `temperature` is accepted and that usage is reported.
-6. Decide and record the temperature and the RQ1 equivalence tolerance before running anything.
-7. Run Exp A and Exp B with the existing resumable runner.
-8. `analysis_pilot02.py` (Section 7) and `plots.py` (Section 8).
-9. Write a pilot-02 findings section in the roadmap and decide the final-study sizes from the observed variance.
+The work is split into 16 small phases (P0 to P15). Each phase ends in one commit on `pilot-2`, has a clear "done when" check, and can be reviewed on its own. Phases marked **offline** use no API calls. Phases marked **live** spend tokens.
+
+### Track overview
+
+```text
+Gate          P0 decisions
+Data track    P1 clean 7-bin data -> P2 quartiles + F1 -> P3 manifests
+Persona track P4 registry -> P5 dynamic graph -> P6 CLI/config -> P7 instrumentation
+Live check    P8 probe + smoke game -> P9 freeze config
+Runs          P10 Exp B wide -> P11 Exp A deep
+Analysis      P12 RQ1/mean/quartile -> P13 distribution + persona -> P14 figures F2-F9
+Write-up      P15 findings + final sizing
+```
+
+The data track and the persona track are independent, so they can be done in either order. P12 to P14 can be written and tested on synthetic run files while P10 and P11 are running.
+
+### Phase table
+
+| Phase | Goal | Main tasks | Done when | Mode | Size |
+|---|---|---|---|---|---|
+| **P0** Decisions | Fix the choices that cannot change after runs start | Choose the temperature (Section 6) and how RQ1 is judged in the pilot. Confirm the RQ2 wording change with the supervisor. | The decisions are written in Section 1 and the README. | offline | S |
+| **P1** Clean human data | Turn `individual` into a 7-bin distribution | Add `experiment/human_data.py`, reusing `manifest.audit_record`. Write `p1 … p7`, `human_mean` and its low/high bounds, `sample`, notes and a duplicate-answer flag. | `src/data/processed/wordle_human_clean.csv` exists with 1,865 rows (1,861 eligible), and tests check that each row's bins sum to 1 and that the means match `manifest.py`. | offline | S |
+| **P2** Quartiles and F1 | Define D1–D4 and check them visually | Rank-based split into four groups of equal size. Save the cut-points to `quartiles.json`. Create `experiment/plots.py` with figure F1 only. | Group sizes are 465/465/465/466, the cut-points are about 3.98, 4.24 and 4.53, and F1 renders cleanly as PDF and PNG. | offline | S |
+| **P3** Manifests | Select the pilot-02 puzzles | Stratified sampling by quartile with seeds `20261013` (deep, 3 per quartile) and `20261014` (wide, 12 per quartile). Exclude pilot-01 puzzles and duplicate answers. Keep the two sets disjoint. | `pilot-02-deep.csv` (12 rows) and `pilot-02-wide.csv` (48 rows) exist, and a test confirms no overlap and identical output on a re-run. | offline | S |
+| **P4** Persona registry | Make personas data, not code | Add `PersonaSpec`, `PERSONAS` and `PRESETS`, and move the existing GM, Negative and Positive into the registry. Add Bold, Cautious and Casual. `create_agents(preset=…)` returns the GM and an ordered advisor list. | The `pilot-01` preset builds the same agents and instructions as before, and the current tests pass unchanged. | offline | S |
+| **P5** Dynamic debate graph | Allow any number of advisors | `sequential.py` builds one node per advisor. Replace `alternative` with `suggestions`. Apply `action_rule` checks for each persona. The GM review prompt lists every suggestion. | `debate_flow_test` passes for `pilot-01` (2 advisors, same call counts as before) and for `pilot-02` (3 advisors). | offline | M |
+| **P6** CLI and config wiring | Choose personas without editing code | Add `--persona-preset` and `--advisors` to the runner and to `debate_test`. Write the chosen keys and full instructions into `experiment_config.json` and each run's metadata. | A scripted-backend run records `bold, cautious, casual` in its config and metadata. | offline | S |
+| **P7** Turn instrumentation | Log the GM and persona statistics | Add `initial_proposal`, `gm_retained`, `advisor_suggestions`, `adopted_from`, `advisor_agreed`, `is_candidate` and `candidates_remaining` (Section 2.3). Candidate checks use public feedback only. | Scripted tests cover retain, adopt and agree cases, and a test confirms that the answer word never appears in any prompt. | offline | M |
+| **P8** Probe and smoke game | Confirm the model works end to end | One call to the model with `temperature`, checking usage, the returned model ID and the `system_fingerprint`. Then play one full game with the `pilot-02` preset. | The probe JSON and one completed run JSON are saved, and a manual read of the transcript shows each persona arguing in character. (`glm-5.3-flash` failed this step; see Section 6.) | live (tiny) | S |
+| **P9** Freeze configuration | Lock pilot-02 | Record the model, the returned snapshot, the temperature, the personas, the prompts, the hashes and the code revision. Tag the commit `pilot-02-frozen`. | The tag exists, and nothing in Section 1 or 6 changes after it. | offline | S |
+| **P10** Run Exp B (wide) | Collect the mean-alignment and quartile data first | 48 puzzles × 3 runs = 144 games, run in chunks with `--max-seconds` and resume. It goes first because it is shorter and gives an early check of the personas. | 48 × 3 completed games, or failures documented under the replacement policy. | live (~5 h) | M |
+| **P11** Run Exp A (deep) | Collect the RQ1 and distribution data | 12 puzzles × 32 runs = 384 games, in chunks with resume. | 12 × 32 completed games, or failures documented. | live (~13 h) | L |
+| **P12** Analysis: RQ1, mean, quartile | Core metrics | Add `analysis_pilot02.py`, reusing the `analysis.py` helpers: within-puzzle SD, ICC(1,1) and ICC(1,k), MAE, signed error, Spearman, Pearson, the 4×4 confusion matrix, quadratic-weighted kappa and bootstrap CIs. | Tests on synthetic runs reproduce known values, and the module produces `metrics.json` and `puzzle_summary.csv`. | offline | M |
+| **P13** Analysis: distribution and persona | Supervisor's comparison and persona statistics | W1, JSD, TVD and chi-square for each puzzle, bootstrap CIs over runs and the split-half W1. Also GM retention and advisor adoption, agreement and non-candidate shares. | Hand-checked synthetic cases pass, and the module writes `distribution_summary.csv` and `persona_stats.csv`. | offline | M |
+| **P14** Figures F2–F9 | Visualize every result | Add F2–F9 to `plots.py`, reading only the analysis outputs. Re-plot pilot-01 with F2, F5, F6 and F7 for comparison. | All figures exist as PDF and PNG at IEEE widths and pass a visual check for clipping, overlap and contrast. | offline | M |
+| **P15** Findings and final sizing | Close pilot-02 | Write a pilot-02 findings section in the roadmap. Use the observed variance to size the final study (runs per puzzle and puzzles per quartile) and to choose the RQ1 equivalence margin and the RQ2 primary measures for the mean and D1–D4 levels. | The roadmap is updated, and the final-study sizes, the RQ1 margin and the RQ2 primaries are recorded before any final run. | offline | S |
+
+### Checkpoints
+
+- **After P7:** all code changes are done and tested offline. Review the diff before spending any tokens.
+- **After P8:** a go/no-go decision on the model and the persona behavior.
+- **After P10:** a quick look at the persona statistics. If Bold and Cautious do not differ in their non-candidate share, fix the prompts and repeat P8 and P9 before running P11. Any wide games already played then belong to a different configuration and must be reported separately.
 
 ## 10. Open questions for the supervisor
 
-- Temperature: favor consistency (low) or player-like spread (high)? See Section 6.
-- RQ2 wording change to include guess-count distributions and quartiles (Section 4).
+- ~~Temperature~~: decided at P0 (`0.2`). See Section 6.
+- ~~RQ1 equivalence tolerance~~: pilot-02 reports RQ1 descriptively (P0). The margin is set at P15 for the final study.
+- RQ2 wording change to the general form in Section 4 (measures defined in the method chapter).
 - Whether a GM personality should become RQ3 in a later study.

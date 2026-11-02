@@ -1,0 +1,910 @@
+{
+  "schema_version": 1,
+  "run_id": "581b67cdc8b44b38a815a0adcad86c0b",
+  "created_at": "2026-10-21T16:08:05.985115+00:00",
+  "status": "completed",
+  "metadata": {
+    "experiment_id": "pilot-02-vb-deep",
+    "backend": "deepseek",
+    "protocol": "chat",
+    "model_requested": "deepseek-flash",
+    "base_url": "https://api.deepseek.com",
+    "temperature": null,
+    "thinking": "enabled",
+    "reasoning_effort": "low",
+    "max_guesses": 6,
+    "max_tokens": 4096,
+    "json_mode": true,
+    "stream": false,
+    "max_rounds": 3,
+    "max_repairs": 2,
+    "request_timeout": 300.0,
+    "api_retries": 1,
+    "puzzle_id": "1223",
+    "target_answer": "BOSSY",
+    "guess_policy": "supplied_vocabulary",
+    "vocabulary_size": 14855,
+    "dataset_sha256": "ed235aa79e1c13a684b7517dda08976967ce8ddb653943632d71b7dea2c41a27",
+    "guess_list_sha256": "9df5dad1b44cf1b9e0fa7c3ebff94d69ff7efb59f8691ac88e74e1c7b3da121e",
+    "repetition": 9,
+    "attempt": 1,
+    "agent_instructions": {
+      "gm": "You are the GM in a Wordle playtesting system. Propose a guess based on the available game state. After the advisors respond, evaluate every advisor's argument and retain or revise your proposal. Do not invent game feedback or claim unanimous agreement.",
+      "bold": "You are the Bold advisor in a Wordle playtesting system. You prefer guesses that could still be the answer, so the game can be won as early as possible. Critique the GM's proposal from this view and suggest a better candidate answer if one exists. Accept the risk of using more guesses later.",
+      "cautious": "You are the Cautious advisor in a Wordle playtesting system. You prefer guesses that rule out the most remaining letters, even if the guess cannot be the answer. Critique the GM's proposal from this view and suggest a more informative guess if one exists. Your priority is never losing the game.",
+      "casual": "You are the Casual advisor in a Wordle playtesting system. You play like a typical daily player. You prefer common, familiar words and a habitual opening word. You do not compute letter statistics. Critique the GM's proposal from this view and suggest the guess an everyday player would make."
+    },
+    "personas": {
+      "preset": "pilot-02",
+      "gm": "neutral_gm",
+      "advisors": [
+        "bold",
+        "cautious",
+        "casual"
+      ],
+      "specs": {
+        "neutral_gm": {
+          "display_name": "Game Master",
+          "slot": "gm",
+          "instruction": "You are the GM in a Wordle playtesting system. Propose a guess based on the available game state. After the advisors respond, evaluate every advisor's argument and retain or revise your proposal. Do not invent game feedback or claim unanimous agreement.",
+          "task": "",
+          "action_rule": "any"
+        },
+        "bold": {
+          "display_name": "Bold Advisor",
+          "slot": "advisor",
+          "instruction": "You are the Bold advisor in a Wordle playtesting system. You prefer guesses that could still be the answer, so the game can be won as early as possible. Critique the GM's proposal from this view and suggest a better candidate answer if one exists. Accept the risk of using more guesses later.",
+          "task": "Critique the current GM proposal from the Bold view. Suggest a guess that could still be the answer and explain why. If the proposal is already the best such guess, return it unchanged. Set stop to false.",
+          "action_rule": "any"
+        },
+        "cautious": {
+          "display_name": "Cautious Advisor",
+          "slot": "advisor",
+          "instruction": "You are the Cautious advisor in a Wordle playtesting system. You prefer guesses that rule out the most remaining letters, even if the guess cannot be the answer. Critique the GM's proposal from this view and suggest a more informative guess if one exists. Your priority is never losing the game.",
+          "task": "Critique the current GM proposal from the Cautious view. Suggest the guess that rules out the most remaining letters and explain why, even if it cannot be the answer. If the proposal is already the most informative guess, return it unchanged. Set stop to false.",
+          "action_rule": "any"
+        },
+        "casual": {
+          "display_name": "Casual Advisor",
+          "slot": "advisor",
+          "instruction": "You are the Casual advisor in a Wordle playtesting system. You play like a typical daily player. You prefer common, familiar words and a habitual opening word. You do not compute letter statistics. Critique the GM's proposal from this view and suggest the guess an everyday player would make.",
+          "task": "Respond to the current GM proposal as an everyday player. Suggest the guess you would make and explain why in plain terms. If you would play the proposal too, return it unchanged. Set stop to false.",
+          "action_rule": "any"
+        }
+      }
+    }
+  },
+  "turns": [
+    {
+      "turn": 1,
+      "observation_before": {
+        "game": "wordle",
+        "word_length": 5,
+        "history": [],
+        "attempts_remaining": 6,
+        "done": false,
+        "won": false,
+        "guess_policy": "supplied_vocabulary"
+      },
+      "final_action": "SLATE",
+      "feedback": "YBBBB",
+      "initial_proposal": "SLATE",
+      "gm_retained": true,
+      "advisor_suggestions": [
+        {
+          "round": 1,
+          "advisor": "bold",
+          "action": "SLATE",
+          "gm_proposal": "SLATE",
+          "abstained": false,
+          "agreed": true,
+          "is_candidate": true
+        },
+        {
+          "round": 1,
+          "advisor": "cautious",
+          "action": "SLATE",
+          "gm_proposal": "SLATE",
+          "abstained": false,
+          "agreed": true,
+          "is_candidate": true
+        },
+        {
+          "round": 1,
+          "advisor": "casual",
+          "action": "CRANE",
+          "gm_proposal": "SLATE",
+          "abstained": false,
+          "agreed": false,
+          "is_candidate": true
+        },
+        {
+          "round": 2,
+          "advisor": "bold",
+          "action": "SLATE",
+          "gm_proposal": "SLATE",
+          "abstained": false,
+          "agreed": true,
+          "is_candidate": true
+        },
+        {
+          "round": 2,
+          "advisor": "cautious",
+          "action": "SLATE",
+          "gm_proposal": "SLATE",
+          "abstained": false,
+          "agreed": true,
+          "is_candidate": true
+        },
+        {
+          "round": 2,
+          "advisor": "casual",
+          "action": "CRANE",
+          "gm_proposal": "SLATE",
+          "abstained": false,
+          "agreed": false,
+          "is_candidate": true
+        }
+      ],
+      "adopted_from": [],
+      "advisor_agreed": {
+        "bold": true,
+        "cautious": true,
+        "casual": false
+      },
+      "is_candidate": {
+        "initial_proposal": true,
+        "final_action": true
+      },
+      "candidates_remaining": 14855,
+      "fallbacks": [],
+      "debate_rounds": 2,
+      "gm_requested_stop": true,
+      "round_cap_reached": false,
+      "termination": "gm_stop",
+      "transcript": [
+        "GM proposes SLATE: No feedback yet; SLATE is a strong opening word covering common letters and positions. Advisors have not spoken, so this is only a proposal.",
+        "Bold Advisor suggests SLATE: SLATE is itself a plausible answer and covers common letters/positions, so it satisfies the Bold preference for a guess that could win immediately. No clearly better candidate exists with no feedback, so keep it unchanged.",
+        "Cautious Advisor suggests SLATE: SLATE already tests five distinct common letters and positions, so it maximizes elimination information with no feedback. No clearly more informative safe opener is available; keep it.",
+        "Casual Advisor suggests CRANE: SLATE is fine, but it feels like a stats-picked opener; I’d just use my usual CRANE. It’s a familiar word with common letters, so it’s an easy everyday first guess.",
+        "GM reviews and selects SLATE: Retain SLATE: Bold and Cautious support it as a strong, plausible opener, while Casual prefers CRANE. SLATE covers common letters and positions well, so the usual-word preference does not outweigh it.",
+        "Bold Advisor suggests SLATE: SLATE is itself a valid answer and covers common letters/positions; no clearly better immediate-win candidate exists with no feedback, so keep it.",
+        "Cautious Advisor suggests SLATE: SLATE tests five distinct common letters and positions, maximizing elimination with no feedback. No clearly more informative valid opener is available, so keep it unchanged.",
+        "Casual Advisor suggests CRANE: SLATE is fine, but it still feels like a stats-picked opener. I’d stick with my usual CRANE—it’s familiar, has common letters, and is an easy everyday first guess.",
+        "GM reviews and selects SLATE: Retain SLATE: Bold and Cautious support its strong letter coverage, while Casual prefers CRANE. With no feedback, another round is unlikely to change this opener choice."
+      ],
+      "elapsed_seconds": 18.693032848008443
+    },
+    {
+      "turn": 2,
+      "observation_before": {
+        "game": "wordle",
+        "word_length": 5,
+        "history": [
+          {
+            "guess": "SLATE",
+            "feedback": "YBBBB"
+          }
+        ],
+        "attempts_remaining": 5,
+        "done": false,
+        "won": false,
+        "guess_policy": "supplied_vocabulary"
+      },
+      "final_action": "BRISK",
+      "feedback": "GBBGB",
+      "initial_proposal": "BRISK",
+      "gm_retained": true,
+      "advisor_suggestions": [
+        {
+          "round": 1,
+          "advisor": "bold",
+          "action": "BRISK",
+          "gm_proposal": "BRISK",
+          "abstained": false,
+          "agreed": true,
+          "is_candidate": true
+        },
+        {
+          "round": 1,
+          "advisor": "cautious",
+          "action": "MOUND",
+          "gm_proposal": "BRISK",
+          "abstained": false,
+          "agreed": false,
+          "is_candidate": false
+        },
+        {
+          "round": 1,
+          "advisor": "casual",
+          "action": "MUSIC",
+          "gm_proposal": "BRISK",
+          "abstained": false,
+          "agreed": false,
+          "is_candidate": true
+        },
+        {
+          "round": 2,
+          "advisor": "bold",
+          "action": "BRISK",
+          "gm_proposal": "MOUND",
+          "abstained": false,
+          "agreed": false,
+          "is_candidate": true
+        },
+        {
+          "round": 2,
+          "advisor": "cautious",
+          "action": "MOUND",
+          "gm_proposal": "MOUND",
+          "abstained": false,
+          "agreed": true,
+          "is_candidate": false
+        },
+        {
+          "round": 2,
+          "advisor": "casual",
+          "action": "MUSIC",
+          "gm_proposal": "MOUND",
+          "abstained": false,
+          "agreed": false,
+          "is_candidate": true
+        },
+        {
+          "round": 3,
+          "advisor": "bold",
+          "action": "BRISK",
+          "gm_proposal": "BRISK",
+          "abstained": false,
+          "agreed": true,
+          "is_candidate": true
+        },
+        {
+          "round": 3,
+          "advisor": "cautious",
+          "action": "MOUND",
+          "gm_proposal": "BRISK",
+          "abstained": false,
+          "agreed": false,
+          "is_candidate": false
+        },
+        {
+          "round": 3,
+          "advisor": "casual",
+          "action": "MUSIC",
+          "gm_proposal": "BRISK",
+          "abstained": false,
+          "agreed": false,
+          "is_candidate": true
+        }
+      ],
+      "adopted_from": [],
+      "advisor_agreed": {
+        "bold": false,
+        "cautious": false,
+        "casual": false
+      },
+      "is_candidate": {
+        "initial_proposal": true,
+        "final_action": true
+      },
+      "candidates_remaining": 938,
+      "fallbacks": [],
+      "debate_rounds": 3,
+      "gm_requested_stop": false,
+      "round_cap_reached": true,
+      "termination": "max_rounds",
+      "transcript": [
+        "GM proposes BRISK: SLATE confirms S is present but not first, while A, E, L, and T are absent. BRISK places S at position 4 and avoids all absent letters.",
+        "Bold Advisor suggests BRISK: BRISK is consistent with the feedback: it avoids A, E, L, T and places S away from position 1, so it could still be the answer. With no further information, no candidate is clearly better for a Bold early win.",
+        "Cautious Advisor suggests MOUND: BRISK tests only four new letters and spends a slot on known S; MOUND probes five fresh letters (M,O,U,N,D) while avoiding absent A/E/L/T, ruling out more candidates. It need not be the answer.",
+        "Casual Advisor suggests MUSIC: BRISK works, but it feels less like a word I'd naturally try. I'd go with a familiar word like MUSIC, keeping S out of the first spot and avoiding A, E, L, and T.",
+        "GM reviews and selects MOUND: The cautious advisor makes the stronger case: MOUND probes five fresh letters while avoiding A/E/L/T, improving elimination over BRISK, which spends a slot on known S. This is not unanimous, but it is the better next guess.",
+        "Bold Advisor suggests BRISK: MOUND cannot be the answer because it omits the known S. BRISK keeps S away from position 1 and avoids A, E, L, and T, so it could still win immediately.",
+        "Cautious Advisor suggests MOUND: MOUND probes five fresh distinct letters while avoiding A, E, L, and T, maximizing elimination despite omitting known S. I see no clearly more informative legal guess, so keep it unchanged.",
+        "Casual Advisor suggests MUSIC: MOUND feels like it ignores the only letter we know is in the word. I’d try a familiar word like MUSIC, keeping S out of the first spot and avoiding A, E, L, and T.",
+        "GM reviews and selects BRISK: I revise to BRISK: unlike MOUND it includes known S away from position 1 and avoids A/E/L/T, so it can win while still testing four fresh letters. The advisors disagree, but this balances solving and information.",
+        "Bold Advisor suggests BRISK: BRISK is a legal candidate answer: it contains the known S away from position 1 and avoids A, E, L, and T. No clearly better word is available, so keep it for a possible early win.",
+        "Cautious Advisor suggests MOUND: BRISK wastes a slot on known S, testing only four new letters. MOUND probes five fresh letters (M,O,U,N,D) while avoiding A/E/L/T, ruling out more candidates even though it cannot be the answer.",
+        "Casual Advisor suggests MUSIC: BRISK works, but it's not the word I'd naturally reach for. I'd try MUSIC: it keeps the known S out of the first spot and avoids A, E, L, and T.",
+        "GM reviews and selects BRISK: Retain BRISK: it can win immediately, keeps known S off position 1, and avoids A/E/L/T while testing four fresh letters. MOUND tests more new letters but ignores known S, so it is not clearly superior."
+      ],
+      "elapsed_seconds": 48.34486476799066
+    },
+    {
+      "turn": 3,
+      "observation_before": {
+        "game": "wordle",
+        "word_length": 5,
+        "history": [
+          {
+            "guess": "SLATE",
+            "feedback": "YBBBB"
+          },
+          {
+            "guess": "BRISK",
+            "feedback": "GBBGB"
+          }
+        ],
+        "attempts_remaining": 4,
+        "done": false,
+        "won": false,
+        "guess_policy": "supplied_vocabulary"
+      },
+      "final_action": "BOSSY",
+      "feedback": "GGGGG",
+      "initial_proposal": "BOSSY",
+      "gm_retained": true,
+      "advisor_suggestions": [
+        {
+          "round": 1,
+          "advisor": "bold",
+          "action": "BOSSY",
+          "gm_proposal": "BOSSY",
+          "abstained": false,
+          "agreed": true,
+          "is_candidate": true
+        },
+        {
+          "round": 1,
+          "advisor": "cautious",
+          "action": "PUNCH",
+          "gm_proposal": "BOSSY",
+          "abstained": false,
+          "agreed": false,
+          "is_candidate": false
+        },
+        {
+          "round": 1,
+          "advisor": "casual",
+          "action": "BOSSY",
+          "gm_proposal": "BOSSY",
+          "abstained": false,
+          "agreed": true,
+          "is_candidate": true
+        },
+        {
+          "round": 2,
+          "advisor": "bold",
+          "action": "BOSSY",
+          "gm_proposal": "BOSSY",
+          "abstained": false,
+          "agreed": true,
+          "is_candidate": true
+        },
+        {
+          "round": 2,
+          "advisor": "cautious",
+          "action": "PUNCH",
+          "gm_proposal": "BOSSY",
+          "abstained": false,
+          "agreed": false,
+          "is_candidate": false
+        },
+        {
+          "round": 2,
+          "advisor": "casual",
+          "action": "BOSSY",
+          "gm_proposal": "BOSSY",
+          "abstained": false,
+          "agreed": true,
+          "is_candidate": true
+        }
+      ],
+      "adopted_from": [],
+      "advisor_agreed": {
+        "bold": true,
+        "cautious": false,
+        "casual": true
+      },
+      "is_candidate": {
+        "initial_proposal": true,
+        "final_action": true
+      },
+      "candidates_remaining": 4,
+      "fallbacks": [],
+      "debate_rounds": 2,
+      "gm_requested_stop": true,
+      "round_cap_reached": false,
+      "termination": "gm_stop",
+      "transcript": [
+        "GM proposes BOSSY: Pattern requires B at position 1 and S at position 4, while A,E,I,K,L,R,T are absent. BOSSY fits and tests O and Y without using absent letters.",
+        "Bold Advisor suggests BOSSY: BOSSY fits B??S? and could still be the answer, testing O and Y without absent letters. No stronger candidate is apparent, so keep it despite the repeated S risk.",
+        "Cautious Advisor suggests PUNCH: BOSSY repeats known B and S, so it only probes O and Y. PUNCH tests five fresh absent-free letters, ruling out more remaining possibilities even though it cannot be the answer.",
+        "Casual Advisor suggests BOSSY: BOSSY looks like a normal word and fits the B _ _ S _ pattern, so I’d just try it. It could be the answer, and I don’t see a more obvious everyday guess.",
+        "GM reviews and selects BOSSY: Retain BOSSY: it matches B??S?, uses no absent letters, and could be the answer. PUNCH ignores confirmed B and S and cannot solve, so BOSSY is the stronger candidate guess.",
+        "Bold Advisor suggests BOSSY: BOSSY fits B??S? and could still be the answer; repeating S is acceptable for a Bold solve attempt. No stronger answer-fit candidate is apparent, so keep it.",
+        "Cautious Advisor suggests PUNCH: BOSSY repeats confirmed B and S, so it only probes O and Y. PUNCH tests five fresh absent-free letters and rules out more remaining possibilities, even though it cannot be the answer.",
+        "Casual Advisor suggests BOSSY: BOSSY looks like a normal word and fits the known B _ _ S _ pattern, so I’d just try it. It could be the answer, and I don’t see a more obvious everyday guess.",
+        "GM reviews and selects BOSSY: Retain BOSSY: it fits B??S?, uses no absent letters, and could be the answer. PUNCH ignores confirmed B and S and cannot solve, so another round is unlikely to change this choice."
+      ],
+      "elapsed_seconds": 57.577288023996516
+    }
+  ],
+  "outcome": {
+    "game_finished": true,
+    "won": true,
+    "guesses_used": 3,
+    "solve_guesses": 3,
+    "history": [
+      {
+        "guess": "SLATE",
+        "feedback": "YBBBB"
+      },
+      {
+        "guess": "BRISK",
+        "feedback": "GBBGB"
+      },
+      {
+        "guess": "BOSSY",
+        "feedback": "GGGGG"
+      }
+    ]
+  },
+  "error": null,
+  "elapsed_seconds": 124.6665588439937,
+  "token_usage": {
+    "cached_prompt_tokens": 12672,
+    "prompt_tokens": 29570,
+    "completion_tokens": 19966,
+    "total_tokens": 49536,
+    "calls": 32,
+    "calls_with_usage": 32,
+    "calls_missing_usage": 0
+  },
+  "calls": [
+    {
+      "role": "gm",
+      "attempt": 1,
+      "rejected": false,
+      "error_type": null,
+      "prompt_tokens": 534,
+      "completion_tokens": 94,
+      "total_tokens": 628,
+      "elapsed_seconds": 1.1998059940087842,
+      "model": "deepseek-flash",
+      "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+      "cached_prompt_tokens": 384,
+      "rejected_text": null
+    },
+    {
+      "role": "bold",
+      "attempt": 1,
+      "rejected": false,
+      "error_type": null,
+      "prompt_tokens": 609,
+      "completion_tokens": 406,
+      "total_tokens": 1015,
+      "elapsed_seconds": 2.6871127810009057,
+      "model": "deepseek-flash",
+      "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+      "cached_prompt_tokens": 384,
+      "rejected_text": null
+    },
+    {
+      "role": "cautious",
+      "attempt": 1,
+      "rejected": false,
+      "error_type": null,
+      "prompt_tokens": 726,
+      "completion_tokens": 350,
+      "total_tokens": 1076,
+      "elapsed_seconds": 2.3831057119969046,
+      "model": "deepseek-flash",
+      "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+      "cached_prompt_tokens": 384,
+      "rejected_text": null
+    },
+    {
+      "role": "casual",
+      "attempt": 1,
+      "rejected": false,
+      "error_type": null,
+      "prompt_tokens": 800,
+      "completion_tokens": 260,
+      "total_tokens": 1060,
+      "elapsed_seconds": 2.190301807000651,
+      "model": "deepseek-flash",
+      "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+      "cached_prompt_tokens": 384,
+      "rejected_text": null
+    },
+    {
+      "role": "gm",
+      "attempt": 1,
+      "rejected": false,
+      "error_type": null,
+      "prompt_tokens": 908,
+      "completion_tokens": 247,
+      "total_tokens": 1155,
+      "elapsed_seconds": 2.0023279059969354,
+      "model": "deepseek-flash",
+      "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+      "cached_prompt_tokens": 384,
+      "rejected_text": null
+    },
+    {
+      "role": "bold",
+      "attempt": 1,
+      "rejected": false,
+      "error_type": null,
+      "prompt_tokens": 805,
+      "completion_tokens": 291,
+      "total_tokens": 1096,
+      "elapsed_seconds": 2.1122893310093787,
+      "model": "deepseek-flash",
+      "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+      "cached_prompt_tokens": 512,
+      "rejected_text": null
+    },
+    {
+      "role": "cautious",
+      "attempt": 1,
+      "rejected": false,
+      "error_type": null,
+      "prompt_tokens": 896,
+      "completion_tokens": 543,
+      "total_tokens": 1439,
+      "elapsed_seconds": 3.599420013008057,
+      "model": "deepseek-flash",
+      "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+      "cached_prompt_tokens": 384,
+      "rejected_text": null
+    },
+    {
+      "role": "casual",
+      "attempt": 1,
+      "rejected": false,
+      "error_type": null,
+      "prompt_tokens": 966,
+      "completion_tokens": 139,
+      "total_tokens": 1105,
+      "elapsed_seconds": 1.0605431119911373,
+      "model": "deepseek-flash",
+      "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+      "cached_prompt_tokens": 384,
+      "rejected_text": null
+    },
+    {
+      "role": "gm",
+      "attempt": 1,
+      "rejected": false,
+      "error_type": null,
+      "prompt_tokens": 1070,
+      "completion_tokens": 196,
+      "total_tokens": 1266,
+      "elapsed_seconds": 1.453919459003373,
+      "model": "deepseek-flash",
+      "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+      "cached_prompt_tokens": 384,
+      "rejected_text": null
+    },
+    {
+      "role": "gm",
+      "attempt": 1,
+      "rejected": false,
+      "error_type": null,
+      "prompt_tokens": 581,
+      "completion_tokens": 207,
+      "total_tokens": 788,
+      "elapsed_seconds": 1.5578507980098948,
+      "model": "deepseek-flash",
+      "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+      "cached_prompt_tokens": 384,
+      "rejected_text": null
+    },
+    {
+      "role": "bold",
+      "attempt": 1,
+      "rejected": false,
+      "error_type": null,
+      "prompt_tokens": 665,
+      "completion_tokens": 716,
+      "total_tokens": 1381,
+      "elapsed_seconds": 4.405622164995293,
+      "model": "deepseek-flash",
+      "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+      "cached_prompt_tokens": 384,
+      "rejected_text": null
+    },
+    {
+      "role": "cautious",
+      "attempt": 1,
+      "rejected": false,
+      "error_type": null,
+      "prompt_tokens": 802,
+      "completion_tokens": 782,
+      "total_tokens": 1584,
+      "elapsed_seconds": 5.113176126003964,
+      "model": "deepseek-flash",
+      "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+      "cached_prompt_tokens": 384,
+      "rejected_text": null
+    },
+    {
+      "role": "casual",
+      "attempt": 1,
+      "rejected": false,
+      "error_type": null,
+      "prompt_tokens": 910,
+      "completion_tokens": 411,
+      "total_tokens": 1321,
+      "elapsed_seconds": 2.7272710840043146,
+      "model": "deepseek-flash",
+      "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+      "cached_prompt_tokens": 384,
+      "rejected_text": null
+    },
+    {
+      "role": "gm",
+      "attempt": 1,
+      "rejected": false,
+      "error_type": null,
+      "prompt_tokens": 1021,
+      "completion_tokens": 570,
+      "total_tokens": 1591,
+      "elapsed_seconds": 3.7019198349880753,
+      "model": "deepseek-flash",
+      "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+      "cached_prompt_tokens": 512,
+      "rejected_text": null
+    },
+    {
+      "role": "bold",
+      "attempt": 1,
+      "rejected": false,
+      "error_type": null,
+      "prompt_tokens": 893,
+      "completion_tokens": 461,
+      "total_tokens": 1354,
+      "elapsed_seconds": 2.748209435987519,
+      "model": "deepseek-flash",
+      "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+      "cached_prompt_tokens": 384,
+      "rejected_text": null
+    },
+    {
+      "role": "cautious",
+      "attempt": 1,
+      "rejected": false,
+      "error_type": null,
+      "prompt_tokens": 1012,
+      "completion_tokens": 1040,
+      "total_tokens": 2052,
+      "elapsed_seconds": 6.670584034989588,
+      "model": "deepseek-flash",
+      "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+      "cached_prompt_tokens": 384,
+      "rejected_text": null
+    },
+    {
+      "role": "casual",
+      "attempt": 1,
+      "rejected": false,
+      "error_type": null,
+      "prompt_tokens": 1102,
+      "completion_tokens": 237,
+      "total_tokens": 1339,
+      "elapsed_seconds": 1.9188086579961237,
+      "model": "deepseek-flash",
+      "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+      "cached_prompt_tokens": 384,
+      "rejected_text": null
+    },
+    {
+      "role": "gm",
+      "attempt": 1,
+      "rejected": false,
+      "error_type": null,
+      "prompt_tokens": 1211,
+      "completion_tokens": 1131,
+      "total_tokens": 2342,
+      "elapsed_seconds": 6.932930794006097,
+      "model": "deepseek-flash",
+      "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+      "cached_prompt_tokens": 512,
+      "rejected_text": null
+    },
+    {
+      "role": "bold",
+      "attempt": 1,
+      "rejected": false,
+      "error_type": null,
+      "prompt_tokens": 1104,
+      "completion_tokens": 390,
+      "total_tokens": 1494,
+      "elapsed_seconds": 2.647793679003371,
+      "model": "deepseek-flash",
+      "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+      "cached_prompt_tokens": 384,
+      "rejected_text": null
+    },
+    {
+      "role": "cautious",
+      "attempt": 1,
+      "rejected": false,
+      "error_type": null,
+      "prompt_tokens": 1231,
+      "completion_tokens": 558,
+      "total_tokens": 1789,
+      "elapsed_seconds": 3.622823697005515,
+      "model": "deepseek-flash",
+      "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+      "cached_prompt_tokens": 384,
+      "rejected_text": null
+    },
+    {
+      "role": "casual",
+      "attempt": 1,
+      "rejected": false,
+      "error_type": null,
+      "prompt_tokens": 1337,
+      "completion_tokens": 241,
+      "total_tokens": 1578,
+      "elapsed_seconds": 1.782916557000135,
+      "model": "deepseek-flash",
+      "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+      "cached_prompt_tokens": 384,
+      "rejected_text": null
+    },
+    {
+      "role": "gm",
+      "attempt": 1,
+      "rejected": false,
+      "error_type": null,
+      "prompt_tokens": 1444,
+      "completion_tokens": 677,
+      "total_tokens": 2121,
+      "elapsed_seconds": 4.509495689999312,
+      "model": "deepseek-flash",
+      "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+      "cached_prompt_tokens": 512,
+      "rejected_text": null
+    },
+    {
+      "role": "gm",
+      "attempt": 1,
+      "rejected": true,
+      "error_type": "ValueError",
+      "prompt_tokens": 608,
+      "completion_tokens": 743,
+      "total_tokens": 1351,
+      "elapsed_seconds": 4.497630420009955,
+      "model": "deepseek-flash",
+      "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+      "cached_prompt_tokens": 256,
+      "rejected_text": "{\"action\":\"BOWSY\",\"reason\":\"Known pattern is B _ _ S _, with B at position 1 and S at position 4. BOWSY fits and tests new letters O, W, and Y without reusing absent letters.\",\"stop\":false}"
+    },
+    {
+      "role": "gm",
+      "attempt": 2,
+      "rejected": false,
+      "error_type": null,
+      "prompt_tokens": 745,
+      "completion_tokens": 1309,
+      "total_tokens": 2054,
+      "elapsed_seconds": 7.110065945002134,
+      "model": "deepseek-flash",
+      "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+      "cached_prompt_tokens": 512,
+      "rejected_text": null
+    },
+    {
+      "role": "bold",
+      "attempt": 1,
+      "rejected": false,
+      "error_type": null,
+      "prompt_tokens": 693,
+      "completion_tokens": 952,
+      "total_tokens": 1645,
+      "elapsed_seconds": 5.339844513000571,
+      "model": "deepseek-flash",
+      "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+      "cached_prompt_tokens": 256,
+      "rejected_text": null
+    },
+    {
+      "role": "cautious",
+      "attempt": 1,
+      "rejected": false,
+      "error_type": null,
+      "prompt_tokens": 802,
+      "completion_tokens": 1755,
+      "total_tokens": 2557,
+      "elapsed_seconds": 10.005954369000392,
+      "model": "deepseek-flash",
+      "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+      "cached_prompt_tokens": 256,
+      "rejected_text": null
+    },
+    {
+      "role": "casual",
+      "attempt": 1,
+      "rejected": false,
+      "error_type": null,
+      "prompt_tokens": 893,
+      "completion_tokens": 626,
+      "total_tokens": 1519,
+      "elapsed_seconds": 3.7833047969907057,
+      "model": "deepseek-flash",
+      "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+      "cached_prompt_tokens": 256,
+      "rejected_text": null
+    },
+    {
+      "role": "gm",
+      "attempt": 1,
+      "rejected": false,
+      "error_type": null,
+      "prompt_tokens": 999,
+      "completion_tokens": 1660,
+      "total_tokens": 2659,
+      "elapsed_seconds": 8.983199839000008,
+      "model": "deepseek-flash",
+      "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+      "cached_prompt_tokens": 512,
+      "rejected_text": null
+    },
+    {
+      "role": "bold",
+      "attempt": 1,
+      "rejected": false,
+      "error_type": null,
+      "prompt_tokens": 897,
+      "completion_tokens": 952,
+      "total_tokens": 1849,
+      "elapsed_seconds": 5.9875321709987475,
+      "model": "deepseek-flash",
+      "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+      "cached_prompt_tokens": 384,
+      "rejected_text": null
+    },
+    {
+      "role": "cautious",
+      "attempt": 1,
+      "rejected": false,
+      "error_type": null,
+      "prompt_tokens": 1004,
+      "completion_tokens": 617,
+      "total_tokens": 1621,
+      "elapsed_seconds": 3.6804737180063967,
+      "model": "deepseek-flash",
+      "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+      "cached_prompt_tokens": 384,
+      "rejected_text": null
+    },
+    {
+      "role": "casual",
+      "attempt": 1,
+      "rejected": false,
+      "error_type": null,
+      "prompt_tokens": 1097,
+      "completion_tokens": 598,
+      "total_tokens": 1695,
+      "elapsed_seconds": 3.633009751996724,
+      "model": "deepseek-flash",
+      "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+      "cached_prompt_tokens": 384,
+      "rejected_text": null
+    },
+    {
+      "role": "gm",
+      "attempt": 1,
+      "rejected": false,
+      "error_type": null,
+      "prompt_tokens": 1205,
+      "completion_tokens": 807,
+      "total_tokens": 2012,
+      "elapsed_seconds": 4.552190497997799,
+      "model": "deepseek-flash",
+      "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+      "cached_prompt_tokens": 512,
+      "rejected_text": null
+    }
+  ],
+  "counters": {
+    "agent_calls": 32,
+    "rejected_responses": 1,
+    "backend_errors": 0
+  }
+}
