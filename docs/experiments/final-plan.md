@@ -224,6 +224,30 @@ The revision cut truncations to about a third and removed the abstentions, so `m
 
 **Decisions at F8 (2 November 2026).** C2 and C3 are not smoke-tested under `parallel`: C2 has no advisors, and C3 was skipped by decision, so C3's truncation rate under `parallel` is first seen in F9. `max_tokens` is raised to 8192 for all conditions without a further smoke test. Finished replies reach 3,500 tokens at the 99th percentile, so 4096 cuts off the longest ones, and a cut-off reply costs the full budget plus a repair. Whether the API accepts 8192 with thinking enabled is first seen in the opening minutes of F9.
 
+A tiny check before F9 (`runs/tokens-8192-check`, 40 calls) accepted 8192 with thinking enabled, without errors. Its longest reply was 3,407 tokens.
+
+### 6.5 Run record (F9, 2 to 4 November 2026)
+
+The three conditions started at the tag (`65aa807`, clean tree) within seven minutes of each other on 2 November 2026 from 16:11 UTC, `--workers 4` each, off-peak only. C2 finished at 17:27 UTC. C1 and C3 finished their first pass on 3 November at 14:48 and 19:04 UTC.
+
+| | C1 | C2 | C3 |
+|---|---|---|---|
+| Completed games | 1,000 / 1,000 | 1,000 / 1,000 | 1,000 / 1,000 |
+| Failed first attempts (retried and completed) | 23 | 0 | 32 |
+| Wins | 997 | 976 | 996 |
+| Mean score | 3.82 | 3.87 | 3.83 |
+| Calls per game | 38.7 | 3.9 | 35.9 |
+| Seconds per game | 216 | 18 | 283 |
+| Truncated replies (`max_tokens`) | 105 of 38,785 calls (0.3%) | 8 of 3,861 | 490 of 36,067 (1.4%) |
+| Cost (off-peak prices of Section 6.3, from the logged tokens) | $20.40 ($0.0204 per game) | $1.62 ($0.0016) | $26.49 ($0.0265) |
+
+- **Failures.** All 55 failed attempts but one (C3, 14:00 UTC) fell between 10:00 and 10:15 UTC on 3 November, when the runner restarted after the peak window: 40 `InternalServerError`, 14 `AttributeError` (calls that hung for about 10 minutes and returned no usable reply, with no model or fingerprint recorded) and one `APIConnectionError`. They are provider-side. Every one completed on its second attempt (`resume`, 3 November 22:09 to 22:53 UTC), so no game is missing and the `missing_as_loss` check equals the main result.
+- **Snapshot.** Every answered call returned `system_fingerprint` `bc19ba97cbe016479903222bb1578db6` and model `deepseek-flash`, so the fingerprint stop rule was never triggered.
+- **Code.** All three conditions recorded revision `65aa8070…` with `code_dirty: false`.
+- **Truncation.** No game failed on `max_tokens`. Every cut-off reply was repaired. C3 truncates about four times as often as C1, and its replies are longer (about 1,170 against 760 completion tokens per call in the interim snapshot).
+- **Spend.** $48.51 for the three conditions, inside the $55 budget. To be checked against the DeepSeek usage page.
+- **Peeking.** An interim analysis of the games finished by 3 November 00:29 UTC was run in a scratch directory and shown during F9. Nothing in the design or the run was changed after it.
+
 ## 7. Analysis
 
 A new `experiment/analysis_final.py` reads the three experiment directories, reusing the helpers of `analysis.py` and `analysis_pilot02.py`. It refuses to run if the three configs differ in anything other than the persona setup and the output directory.
@@ -283,7 +307,7 @@ The final study uses two ablations, C2 (no debate) and C3 (no personas). Other d
 | **F6** Final analysis | Per-condition metrics and paired contrasts | Add `analysis_final.py` (Section 7), terciles, the ICC F-intervals and the Holm-corrected Wilcoxon contrasts. | Tests on synthetic runs reproduce known values, and the module writes `metrics.json`, `condition_summary.csv`, `contrasts.csv` and `persona_stats.csv` (plus `puzzle_summary.csv` and `runs.csv` for F11). | offline | M |
 | **F7** Smoke tests | Measure C2 and C3 before freezing | Play the smoke manifest × 2 games in each condition (48 games, under $1). Read one transcript per condition. | At least 15 of 16 games complete per condition, the neutral advisors argue without playstyles, and the measured cost per game replaces the estimates in Section 6.3. | live (tiny) | S |
 | **F8** Freeze | Lock the final configuration | Record the model, snapshot, settings, personas, prompts, hashes and code revision in Section 6.1. Tag `final-frozen`. | The tag exists, and nothing in Sections 1, 2 or 6 changes after it. | offline | S |
-| **F9** Run | Collect the 3,000 games | C1, C2 and C3 in parallel, 4 workers each (Section 6.2). | 100 × 10 completed games per condition, or failures documented. | live (~16 h) | L |
+| **F9** Run | Collect the 3,000 games | C1, C2 and C3 in parallel, 4 workers each (Section 6.2). Done 2 to 4 November 2026 (Section 6.5). | 100 × 10 completed games per condition, or failures documented. | live (~16 h) | L |
 | **F10** Analysis | Produce the results | Run `analysis_final.py` on the three directories. | `metrics.json` and the CSVs exist in `experiments/final-analysis`. | offline | S |
 | **F11** Figures | Visualize the results | Extend `plots.py` with per-condition panels and contrast plots, read only from the analysis outputs. | All figures exist as PDF and PNG and pass a visual check. | offline | M |
 | **F12** Findings | Close the study | Write the findings into the roadmap and the thesis results chapter. | The results are recorded with the deviations from this plan. | offline | S |
