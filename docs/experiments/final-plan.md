@@ -308,7 +308,7 @@ The final study uses two ablations, C2 (no debate) and C3 (no personas). Other d
 | **F7** Smoke tests | Measure C2 and C3 before freezing | Play the smoke manifest × 2 games in each condition (48 games, under $1). Read one transcript per condition. | At least 15 of 16 games complete per condition, the neutral advisors argue without playstyles, and the measured cost per game replaces the estimates in Section 6.3. | live (tiny) | S |
 | **F8** Freeze | Lock the final configuration | Record the model, snapshot, settings, personas, prompts, hashes and code revision in Section 6.1. Tag `final-frozen`. | The tag exists, and nothing in Sections 1, 2 or 6 changes after it. | offline | S |
 | **F9** Run | Collect the 3,000 games | C1, C2 and C3 in parallel, 4 workers each (Section 6.2). Done 2 to 4 November 2026 (Section 6.5). | 100 × 10 completed games per condition, or failures documented. | live (~16 h) | L |
-| **F10** Analysis | Produce the results | Run `analysis_final.py` on the three directories. | `metrics.json` and the CSVs exist in `experiments/final-analysis`. | offline | S |
+| **F10** Analysis | Produce the results | Run `analysis_final.py` on the three directories. Done 4 November 2026 at revision `0dd8aae`. | `metrics.json` and the CSVs exist in `experiments/final-analysis`. | offline | S |
 | **F11** Figures | Visualize the results | Extend `plots.py` with per-condition panels and contrast plots, read only from the analysis outputs. | All figures exist as PDF and PNG and pass a visual check. | offline | M |
 | **F12** Findings | Close the study | Write the findings into the roadmap and the thesis results chapter. | The results are recorded with the deviations from this plan. | offline | S |
 
