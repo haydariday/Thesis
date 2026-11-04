@@ -32,3 +32,14 @@ Cited from memory in `final-plan.md` Sections 5 and 7. Check them before they en
 | Koo and Li (*Journal of Chiropractic Medicine*, 2016) | At least 30 subjects for an ICC study |
 | Thompson (1987) | Margin of the 7-bin shares at 10 runs |
 | Shrout and Fleiss (1979) | ICC(1,1), ICC(1,k) and their F-distribution intervals |
+
+### 1.3 Persona papers (chapter 2 rationale)
+
+Suggested on 4 November 2026 for the rationale of why personas could improve the playtester (chapter 2, Section 2.3). Both are cited from memory, not from reading the papers. Check the authors, venue, year and the claim before citing either.
+
+| Claim used | Source to check | Side |
+|---|---|---|
+| LLMs conditioned on persona backstories reproduce the response distributions of human subgroups | Argyle et al., "Out of One, Many: Using Language Models to Simulate Human Samples", *Political Analysis*, 2023 | For: diverse personas could bring the aggregate closer to a human population |
+| Personas in system prompts do not reliably improve performance on objective tasks | Zheng et al., "Is 'A Helpful Assistant' the Best Role for Large Language Models? A Systematic Evaluation of Social Roles in System Prompts", Findings of EMNLP, 2024 | Against: the benefit of personas is not guaranteed |
+
+The chapter 2 evidence already in the reference list is indirect: [chen2025] (personas give more diverse solutions with higher test coverage) and [chan2024] (diverse roles matter in a debate). Neither concerns difficulty measurement, so the rationale says that no study has yet shown personas improve agreement with human difficulty.
