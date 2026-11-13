@@ -1,7 +1,7 @@
 # Chapter 1 – working notes
 
 Working title: **Persona-Based Multi-Agent LLM Debate as an Automated Playtester: Validating Game Difficulty Data Against Human Performance Baselines**
-Scope: conference scope (Wordle only, RQ1 consistency, RQ2 human difficulty alignment). This follows the repo roadmap. The single-agent comparison, Slay the Spire, and expert evaluation are out of scope.
+Scope: conference scope (Wordle only, RQ1 consistency, RQ2 human difficulty alignment). This follows the repo roadmap. The single-agent condition and the debate without personas enter the final study as reference conditions, reported as context. Slay the Spire and expert evaluation are out of scope.
 
 ## Versions
 
@@ -10,7 +10,7 @@ Each version lives in its own folder (`v1/`, `v2/`, …) with `chapter-1.src.md`
 | Version | Date | Status | Structure and changes |
 |---|---|---|---|
 | v1 | 2026-10-13 | frozen | 1.1 Background, 1.2 Problem Identification, 1.3 Objective. Includes the 2026-10-15 hand edits to `chapter-1.md` (Weber cited on the opening question, hypotheses removed), now also applied to `chapter-1.src.md`. |
-| v2 | 2026-10-15 | working | Six subheadings: 1.1 Background, 1.2 Problem Statement, 1.3 Research Questions, 1.4 Research Objectives, 1.5 Scope and Limitations, 1.6 Expected Contributions. The single-agent scope sentence and the contribution sentence moved from Background P4 to 1.5 and 1.6. Objectives 2 and 3 now name the RQ they answer. 1.5 is new text, kept general (Wordle only, objective difficulty, system validation, no single-agent comparison, group-level human baselines); the technical details (sampling by category, fixed configuration, public feedback only, loss = 7) belong in chapters 2–3. RQ3 (persona behavior, descriptive; measured by `persona_stats.py` from P13) and objective 4 added on 2026-10-15, citing Baltaji et al. (persona conformity) and Xiao and Yang's unreported variance. Needs supervisor approval as a scope change. `docs/experiments/pilot-02-plan.md` still says every measurement sits under RQ1 or RQ2. |
+| v2 | 2026-10-15 | working | Six subheadings: 1.1 Background, 1.2 Problem Statement, 1.3 Research Questions, 1.4 Research Objectives, 1.5 Scope and Limitations, 1.6 Expected Contributions. The single-agent scope sentence and the contribution sentence moved from Background P4 to 1.5 and 1.6. Objectives 2 and 3 now name the RQ they answer. 1.5 is new text, kept general (Wordle only, objective difficulty, system validation, no single-agent comparison, group-level human baselines); the technical details (sampling by category, fixed configuration, public feedback only, loss = 7) belong in chapters 2–3. RQ3 (persona behavior, descriptive; measured by `persona_stats.py` from P13) and objective 4 added on 2026-10-15, citing Baltaji et al. (persona conformity) and Xiao and Yang's unreported variance. Needs supervisor approval as a scope change. `docs/experiments/pilot-02-plan.md` still says every measurement sits under RQ1 or RQ2. On 2026-11-11 RQ3 was removed and the persona behavior is described in 1.3 without a numbered question, so the chapter keeps the RQ1–RQ2 conference scope. 1.5 now reports the single-agent and no-persona conditions as reference conditions, and 1.6 gained a fifth contribution. RQ3 stays in the thesis report as the expert evaluation. |
 
 ## Files (per version)
 
